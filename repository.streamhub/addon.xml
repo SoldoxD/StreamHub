@@ -2,9 +2,9 @@
 <addon id="repository.streamhub" name="StreamHub Repository" version="1.0.0" provider-name="cybermodz">
 	<extension point="xbmc.addon.repository" name="StreamHub Repository">
 		<dir>
-			<info compressed="false">https://soldoxd.github.io/StreamHub.github.io/addons.xml</info>
-			<checksum>https://soldoxd.github.io/StreamHub.github.io/addons.xml.md5</checksum>
-			<datadir zip="true">https://soldoxd.github.io/StreamHub.github.io/</datadir>
+			<info compressed="false">https://soldoxd.github.io/StreamHub/addons.xml</info>
+			<checksum>https://soldoxd.github.io/StreamHub/addons.xml.md5</checksum>
+			<datadir zip="true">https://soldoxd.github.io/StreamHub/</datadir>
 		</dir>
 	</extension>
 	<extension point="xbmc.addon.metadata">

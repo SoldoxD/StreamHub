@@ -10,7 +10,7 @@ host picker.
 
 2. **Add this repository as a file source**
    - Settings → File manager → Add source
-   - Path: `https://soldoxd.github.io/StreamHub.github.io/`
+   - Path: `https://soldoxd.github.io/StreamHub/`
    - Name: `streamhub`
 
 3. **Install from zip file**
