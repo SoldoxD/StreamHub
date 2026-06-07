@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addons>
+<addon id="repository.streamhub" name="StreamHub Repository" version="1.0.0" provider-name="cybermodz">
+	<extension point="xbmc.addon.repository" name="StreamHub Repository">
+		<dir>
+			<info compressed="false">https://soldoxd.github.io/StreamHub.github.io/addons.xml</info>
+			<checksum>https://soldoxd.github.io/StreamHub.github.io/addons.xml.md5</checksum>
+			<datadir zip="true">https://soldoxd.github.io/StreamHub.github.io/</datadir>
+		</dir>
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en">StreamHub Kodi Repository</summary>
+		<description lang="en">Repository hosting the StreamHub video addon. Adds multi-source movie/series search, soccer schedule (DLHD), and live TV.</description>
+		<platform>all</platform>
+	</extension>
+</addon>
+<addon id="plugin.video.streamhub" name="StreamHub" version="2026.06.09" provider-name="cybermodz">
+	<requires>
+		<!-- StreamHub is self-contained: a vendored urllib-based HTTP shim
+		     handles requests, and resolveurl / dateutil / infotagger are
+		     used opportunistically (the code degrades gracefully when they
+		     aren't installed). Only xbmc.python is strictly required.
+		     inputstream.adaptive is bundled with Kodi from Krypton on. -->
+		<import addon="xbmc.python" version="3.0.1"/>
+		<import addon="inputstream.adaptive" optional="true"/>
+		<import addon="inputstream.ffmpegdirect" optional="true"/>
+		<import addon="script.module.resolveurl" optional="true"/>
+		<import addon="script.module.infotagger" optional="true"/>
+		<import addon="script.module.dateutil" optional="true"/>
+		<import addon="script.module.requests" optional="true"/>
+	</requires>
+	<extension point="xbmc.python.pluginsource" library="resources/main.py">
+		<provides>video</provides>
+	</extension>
+	<extension point="xbmc.python.module" library="resources" />
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en">StreamHub Video Add-on</summary>
+		<description lang="en">Live TV, movies and series with xstream-style multi-source host selection. Live: VAVOO, DaddyLive (DLHD) + Soccer schedule, Stalker. Movies/Series across VAVOO + 67movies + ramoflix + filmpalast + kinox. Resolved via resolveurl + best-effort embed extractors.</description>
+		<summary lang="de_DE">StreamHub Video Add-on</summary>
+		<description lang="de_DE">Live-TV, Filme und Serien mit xstream-Stil Hoster-Auswahl. Live: VAVOO, DaddyLive (DLHD) + Soccer-Schedule, Stalker. Filme/Serien aus VAVOO + 67movies + ramoflix + filmpalast + kinox. Auflösung via resolveurl + Embed-Extraktoren.</description>
+		<platform>all</platform>
+		<assets>
+			<icon>icon.png</icon>
+		</assets>
+	</extension>
+</addon>
+</addons>
