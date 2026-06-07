@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StreamHub Kodi Repository</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0d1117; color: #e6edf3;
+    display: flex; justify-content: center;
+  }
+  main { max-width: 720px; width: 100%; }
+  h1 { margin: 0 0 0.25rem; font-size: 2rem; letter-spacing: -0.02em; }
+  .tag { color: #7d8590; margin: 0 0 2rem; }
+  h2 { border-bottom: 1px solid #21262d; padding-bottom: 0.4rem; margin-top: 2.4rem; }
+  code, .url {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #161b22; padding: 0.1rem 0.45rem; border-radius: 4px;
+    word-break: break-all;
+  }
+  .url {
+    display: block; padding: 0.75rem 1rem; margin: 0.5rem 0 1.5rem;
+    border: 1px solid #30363d; font-size: 0.95rem;
+  }
+  ol { padding-left: 1.4rem; }
+  li { margin-bottom: 0.5rem; }
+  a { color: #79c0ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .files {
+    list-style: none; padding: 0; margin: 0.5rem 0;
+    border: 1px solid #30363d; border-radius: 6px;
+  }
+  .files li {
+    margin: 0; padding: 0.65rem 1rem;
+    border-bottom: 1px solid #21262d;
+    display: flex; justify-content: space-between; gap: 1rem;
+  }
+  .files li:last-child { border-bottom: none; }
+  .files .size { color: #7d8590; font-size: 0.85rem; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #21262d; color: #7d8590; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>StreamHub</h1>
+  <p class="tag">Kodi 21+ video add-on. Live TV, movies and series with xstream-style multi-source host selection.</p>
+
+  <h2>Install in Kodi</h2>
+  <ol>
+    <li>Settings → System → Add-ons → <b>Unknown sources</b> → ON</li>
+    <li>Settings → <b>File manager</b> → Add source → paste:
+      <span class="url">https://soldoxd.github.io/StreamHub.github.io/</span>
+      Name it <code>streamhub</code>.</li>
+    <li>Settings → Add-ons → <b>Install from zip file</b> → <code>streamhub</code> →
+      <code>repository.streamhub</code> → <code>repository.streamhub-1.0.0.zip</code></li>
+    <li>Settings → Add-ons → <b>Install from repository</b> → StreamHub Repository →
+      Video add-ons → <b>StreamHub</b> → Install</li>
+  </ol>
+  <p>Future updates come automatically through <i>Check for updates</i>.</p>
+
+  <h2>Files</h2>
+  <ul class="files">
+    <li><a href="addons.xml">addons.xml</a><span class="size">repository manifest</span></li>
+    <li><a href="addons.xml.md5">addons.xml.md5</a><span class="size">checksum</span></li>
+    <li><a href="repository.streamhub/repository.streamhub-1.0.0.zip">repository.streamhub-1.0.0.zip</a><span class="size">repo addon</span></li>
+    <li><a href="plugin.video.streamhub/plugin.video.streamhub-2026.06.09.zip">plugin.video.streamhub-2026.06.09.zip</a><span class="size">video addon (direct install)</span></li>
+  </ul>
+
+  <h2>What's inside</h2>
+  <ul>
+    <li><b>Live TV</b>: VAVOO + DaddyLive (DLHD) with soccer schedule, optional Stalker</li>
+    <li><b>Movies / Series</b> with multi-host picker: VAVOO + 67movies + ramoflix + filmpalast + kinox</li>
+    <li><b>Self-contained</b>: vendored urllib HTTP client; works on a fresh Kodi without
+      <code>script.module.requests</code>, <code>resolveurl</code>, <code>dateutil</code>, or
+      <code>infotagger</code> (used if present, not required).</li>
+  </ul>
+
+  <footer>
+    Repo: <a href="https://github.com/SoldoxD/StreamHub.github.io">github.com/SoldoxD/StreamHub.github.io</a>
+  </footer>
+</main>
+</body>
+</html>
