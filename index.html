@@ -2,42 +2,71 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>StreamHub Kodi Repository</title>
+<title>StreamHub for Kodi</title>
 <style>
   body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; background: #0d1117; color: #e6edf3; }
   h1, h2 { border-bottom: 1px solid #21262d; padding-bottom: .3rem; }
+  h1 { margin-top: 0; }
   a { color: #79c0ff; text-decoration: none; }
   a:hover { text-decoration: underline; }
-  pre { background: #161b22; padding: 1rem; border-radius: 6px; overflow-x: auto; }
-  code { background: #161b22; padding: .1rem .4rem; border-radius: 3px; }
-  ol li { margin-bottom: .5rem; }
+  code { background: #161b22; padding: .1rem .4rem; border-radius: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  ol li, ul li { margin-bottom: .35rem; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: .3rem .6rem; border-bottom: 1px solid #21262d; }
+  .tag { color: #7d8590; }
 </style>
 </head>
 <body>
 
 <h1>StreamHub</h1>
-<p>Kodi 21+ video add-on. Live TV, movies, series with xstream-style multi-host picker.</p>
+<p class="tag">Kodi 21+ video add-on. Live TV, movies, series with xstream-style multi-host picker.</p>
 
-<h2>Install in Kodi</h2>
+<h2>Install</h2>
 <ol>
-  <li>Settings &rarr; System &rarr; Add-ons &rarr; <b>Unknown sources</b> &rarr; ON</li>
-  <li>Settings &rarr; <b>File manager</b> &rarr; Add source &rarr; paste<br>
-      <code>https://soldoxd.github.io/StreamHub/</code><br>Name it <code>streamhub</code></li>
+  <li>In Kodi: Settings &rarr; System &rarr; Add-ons &rarr; <b>Unknown sources</b> &rarr; ON</li>
+  <li>Settings &rarr; <b>File manager</b> &rarr; Add source &rarr; paste:<br>
+      <code>https://soldoxd.github.io/StreamHub/</code><br>Name it <code>streamhub</code>.</li>
   <li>Settings &rarr; Add-ons &rarr; <b>Install from zip file</b> &rarr; <code>streamhub</code> &rarr;
-      <code>repository.streamhub</code> &rarr; <code>repository.streamhub-1.0.0.zip</code></li>
-  <li>Settings &rarr; Add-ons &rarr; <b>Install from repository</b> &rarr; StreamHub Repository &rarr;
-      Video add-ons &rarr; <b>StreamHub</b> &rarr; Install</li>
+      <code>plugin.video.streamhub</code> &rarr; <code>plugin.video.streamhub-2026.06.09.zip</code></li>
 </ol>
+<p>Done. The addon appears in Add-ons &rarr; Video add-ons &rarr; <b>StreamHub</b>.</p>
 
-<h2>Index of /</h2>
+<h2>First-time setup</h2>
+<p>Open StreamHub once, then back out to the add-on tile and pick <b>Configure</b> (or right-click &rarr; Settings) to switch sources on/off:</p>
+<ul>
+  <li><b>VAVOO</b> &mdash; on by default. Most reliable live + VOD source.</li>
+  <li><b>DLHD (DaddyLive)</b> &mdash; off by default. Enable to get the
+    <b>Live &rarr; Live - Soccer (DLHD)</b> menu, a soccer schedule, and DLHD
+    channels under <i>Live - Gruppen</i>.</li>
+  <li><b>STALKER</b> &mdash; off by default. Only useful if you have an IPTV portal.</li>
+  <li><b>MOVIES (Multi-Quelle)</b> &mdash; toggle 67movies, ramoflix, filmpalast,
+    kinox individually. Vavoo + filmpalast are the most reliable; the others
+    are JS-protected and won't always extract.</li>
+</ul>
+
+<h2>What's inside</h2>
+<ul>
+  <li><b>Live TV</b>: VAVOO + DaddyLive (DLHD with soccer schedule), optional Stalker</li>
+  <li><b>Movies / Series</b> with xstream-style multi-host picker across
+    VAVOO, 67movies, ramoflix, filmpalast, kinox &mdash; search runs in parallel,
+    results are deduped by title, the host list merges every source that has the title.</li>
+  <li><b>Self-contained</b>: vendored urllib HTTP client; works on a fresh Kodi
+    without <code>script.module.requests</code>, <code>resolveurl</code>,
+    <code>dateutil</code>, or <code>infotagger</code>. Uses them if present.</li>
+</ul>
+
+<h2>Files</h2>
 <table>
+<tr><td><a href="plugin.video.streamhub/">plugin.video.streamhub/</a></td></tr>
 <tr><td><a href="addons.xml">addons.xml</a></td></tr>
 <tr><td><a href="addons.xml.md5">addons.xml.md5</a></td></tr>
-<tr><td><a href="plugin.video.streamhub/">plugin.video.streamhub/</a></td></tr>
-<tr><td><a href="repository.streamhub/">repository.streamhub/</a></td></tr>
 </table>
+
+<h2>Updating</h2>
+<p>Re-run steps 2 &amp; 3 of <i>Install</i> with the new zip filename. Kodi
+will overwrite the existing install while keeping your settings.</p>
+
+<p class="tag" style="margin-top:3rem">Repo: <a href="https://github.com/SoldoxD/StreamHub">github.com/SoldoxD/StreamHub</a></p>
 
 </body>
 </html>
