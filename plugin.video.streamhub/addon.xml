@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon id="plugin.video.streamhub" name="StreamHub" version="2026.06.09" provider-name="cybermodz">
+<addon id="plugin.video.streamhub" name="StreamHub" version="2026.06.10" provider-name="cybermodz">
 	<requires>
 		<!-- StreamHub is self-contained: a vendored urllib-based HTTP shim
 		     handles requests, and resolveurl / dateutil / infotagger are
@@ -18,6 +18,7 @@
 		<provides>video</provides>
 	</extension>
 	<extension point="xbmc.python.module" library="resources" />
+	<extension point="xbmc.service" library="resources/service.py" start="startup"/>
 	<extension point="xbmc.addon.metadata">
 		<summary lang="en">StreamHub Video Add-on</summary>
 		<description lang="en">Live TV, movies and series with xstream-style multi-source host selection. Live: VAVOO, DaddyLive (DLHD) + Soccer schedule, Stalker. Movies/Series across VAVOO + 67movies + ramoflix + filmpalast + kinox. Resolved via resolveurl + best-effort embed extractors.</description>
