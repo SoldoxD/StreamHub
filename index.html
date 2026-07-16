@@ -50,8 +50,8 @@
   <li><b>Basic</b> &mdash; the three that matter:
     <b>Preferred language</b> (default German; streams in your language are sorted first),
     <b>Always pick host manually</b>, and <b>Auto-Update</b>.</li>
-  <li><b>Advanced</b> &mdash; turn individual sources off (vavoo, livetv.sx, 67movies,
-    ramoflix, filmpalast, kinox), stream quality cap, HLS player, and cache/maintenance actions.</li>
+  <li><b>Advanced</b> &mdash; turn individual sources off (vavoo, livetv.sx, movie4k,
+    67movies, ramoflix, filmpalast, kinox), stream quality cap, HLS player, and cache/maintenance actions.</li>
   <li><b>Expert</b> &mdash; debug logging and the optional STALKER IPTV portal (off by default).</li>
 </ul>
 <p><b>DLHD (DaddyLive)</b> is always enabled &mdash; it has no toggle. Its channels are
@@ -60,10 +60,14 @@
 
 <h2>What's inside</h2>
 <ul>
-  <li><b>Live TV</b>: VAVOO + DaddyLive (DLHD with soccer schedule), optional Stalker</li>
+  <li><b>Live TV</b>: two menus only &mdash; <b>Kanäle</b> and <b>Sport</b>.
+    Channels are filtered to your preferred language and merged across VAVOO +
+    DaddyLive (one entry per channel, pick the source). Sport merges DLHD and
+    livetv.sx events. Optional Stalker.</li>
   <li><b>Movies / Series</b> with xstream-style multi-host picker across
-    VAVOO, 67movies, ramoflix, filmpalast, kinox &mdash; search runs in parallel,
-    results are deduped by title, the host list merges every source that has the title.</li>
+    VAVOO, movie4k.sx, 67movies, ramoflix, filmpalast, kinox &mdash; search runs in parallel,
+    results are deduped by title, the host list merges every source that has the title.
+    Series metadata comes from VAVOO or movie4k.</li>
   <li><b>Self-contained</b>: vendored urllib HTTP client; works on a fresh Kodi
     without <code>script.module.requests</code>, <code>resolveurl</code>,
     <code>dateutil</code>, or <code>infotagger</code>. Uses them if present.</li>
