@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.streamhub" name="StreamHub" version="2026.06.13.3" provider-name="cybermodz">
+<addon id="plugin.video.streamhub" name="StreamHub" version="2026.06.14" provider-name="cybermodz">
 	<requires>
-		<!-- StreamHub is self-contained: a vendored urllib-based HTTP shim
-		     handles requests, and resolveurl / dateutil / infotagger are
-		     used opportunistically (the code degrades gracefully when they
-		     aren't installed). Only xbmc.python is strictly required.
-		     inputstream.adaptive is bundled with Kodi from Krypton on. -->
-		<import addon="xbmc.python" version="3.0.1"/>
+		<!-- xbmc.python 3.0.0 covers Kodi 19 (Matrix) and up. -->
+		<import addon="xbmc.python" version="3.0.0"/>
 		<import addon="inputstream.adaptive" optional="true"/>
 		<import addon="inputstream.ffmpegdirect" optional="true"/>
 		<import addon="script.module.resolveurl" optional="true"/>
