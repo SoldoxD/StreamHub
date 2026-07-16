@@ -42,18 +42,21 @@
 </ul>
 <p>After an update is installed, restart Kodi for the new code to take effect.</p>
 
-<h2>First-time setup</h2>
-<p>Open StreamHub once, then back out to the add-on tile and pick <b>Configure</b> (or right-click &rarr; Settings) to switch sources on/off:</p>
+<h2>Settings</h2>
+<p>Every source is <b>on by default</b> &mdash; StreamHub works out of the box, no setup needed.
+   The settings screen has a <b>Basic</b> / <b>Advanced</b> / <b>Expert</b> switcher
+   (bottom-left of Kodi's settings window).</p>
 <ul>
-  <li><b>VAVOO</b> &mdash; on by default. Most reliable live + VOD source.</li>
-  <li><b>DLHD (DaddyLive)</b> &mdash; off by default. Enable to get the
-    <b>Live &rarr; Live - Soccer (DLHD)</b> menu, a soccer schedule, and DLHD
-    channels under <i>Live - Gruppen</i>.</li>
-  <li><b>STALKER</b> &mdash; off by default. Only useful if you have an IPTV portal.</li>
-  <li><b>MOVIES (Multi-Quelle)</b> &mdash; toggle 67movies, ramoflix, filmpalast,
-    kinox individually. Vavoo + filmpalast are the most reliable; the others
-    are JS-protected and won't always extract.</li>
+  <li><b>Basic</b> &mdash; the three that matter:
+    <b>Preferred language</b> (default German; streams in your language are sorted first),
+    <b>Always pick host manually</b>, and <b>Auto-Update</b>.</li>
+  <li><b>Advanced</b> &mdash; turn individual sources off (vavoo, livetv.sx, 67movies,
+    ramoflix, filmpalast, kinox), stream quality cap, HLS player, and cache/maintenance actions.</li>
+  <li><b>Expert</b> &mdash; debug logging and the optional STALKER IPTV portal (off by default).</li>
 </ul>
+<p><b>DLHD (DaddyLive)</b> is always enabled &mdash; it has no toggle. Its channels are
+   merged into the normal channel list (duplicates of a vavoo channel become one entry
+   where you pick the source) and its sport events are merged with livetv.sx under <b>Sport</b>.</p>
 
 <h2>What's inside</h2>
 <ul>
