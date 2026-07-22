@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon id="plugin.video.streamhub" name="StreamHub" version="2026.07.19" provider-name="cybermodz">
+<addon id="plugin.video.streamhub" name="StreamHub" version="2026.07.20" provider-name="cybermodz">
 	<requires>
 		<!-- xbmc.python 3.0.0 covers Kodi 19 (Matrix) and up. -->
 		<import addon="xbmc.python" version="3.0.0"/>
