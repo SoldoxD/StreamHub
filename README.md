@@ -45,3 +45,108 @@ Open the addon once, back out to the tile, then **Configure** (right-click → S
 
 - [plugin.video.streamhub/](plugin.video.streamhub/) — the addon zips
 - [addons.xml](addons.xml) / [addons.xml.md5](addons.xml.md5) — manifest the auto-updater reads
+
+
+## Playback update 2026.10.12
+
+The editable add-on is now in `src/plugin.video.streamhub/`. `build.py` builds
+that source into the installable ZIP and updates the repository manifests.
+The separate Desktop source directory is no longer used for builds.
+
+```sh
+python -m unittest discover -s tests -v
+python build.py
+```
+
+This update fixes these concrete playback issues:
+
+- Kodi 21+ cache presets now use the supported `filecache.*` settings API.
+  The old XML cache tags were ignored on those versions. Presets are
+  64/128/256 MiB with adaptive reading; the default for new installs is 64 MiB.
+  Kodi 19/20 retains XML support. Original settings are backed up and restored
+  when the StreamHub preset is disabled, preserving later manual changes.
+- All movie, episode, legacy Vavoo, live TV and sport playback paths share the
+  same header and inputstream setup. Adaptive receives authentication headers
+  for manifests and media segments, including headers embedded in resolver URLs.
+- Optional inputstreams are checked before use; absent or disabled components
+  fall back to Kodi's native player. Live playback no longer forces disk timeshift.
+- Status checks read only headers. Deep host checks and stream probes have body
+  limits, and both HTTP implementations close unused connections. Background
+  resolver workers skip verification after a host has already been selected.
+- Adaptive HLS/DASH honors the chosen resolution ceiling on Kodi 20+.
+  Explicitly labelled direct sources honor the same ceiling; unknown-quality
+  sources remain available. New installs default to 1080p and automatic HLS
+  selection. Existing explicit playback preferences are retained.
+- VOE prefers its adaptive playlist when available, with direct MP4 as fallback.
+
+### Fire TV setup and verification
+
+Install `plugin.video.streamhub/plugin.video.streamhub-2026.10.12.zip` in Kodi
+and restart Kodi once to load the updated background service. In StreamHub's
+settings, select **64 MB**, **maximum 1080p** (720p if needed), and **HLS: Auto**.
+Enable Kodi's **InputStream Adaptive** add-on for adaptive playback. Existing
+installations may retain their previously selected values; an update does not
+reset those preferences. **Show buffer status** displays the actual Kodi cache
+settings. InputStream add-ons have their own buffers; changing Kodi's file cache
+does not resize the Adaptive buffer.
+
+Offline regression tests cover cache migration/rollback, bounded downloads,
+connection closure, quality limits, header propagation and playback setup.
+There has been no live playback test on the user's Fire TV. Verify a film and an
+episode on the previously affected hosts, plus a live stream if used, for at least
+10 minutes each and test seeking/resuming. If sound continues while frames
+stutter, note the Fire TV model, codec and resolution; this may be a decoding or
+frame-rate issue rather than a download problem. Slow or unavailable hosts and
+insufficient network throughput can still cause pauses; this update cannot
+guarantee uninterrupted playback on every host.
+
+Technical references: [Kodi cache settings](https://kodi.wiki/view/Settings/Services/Caching),
+[InputStream Adaptive integration](https://github.com/xbmc/inputstream.adaptive/wiki/Integration),
+[stream selection properties](https://github.com/xbmc/inputstream.adaptive/wiki/Stream-selection-types-properties),
+[FFmpegdirect documentation](https://github.com/xbmc/inputstream.ffmpegdirect/blob/Omega/README.md).
+
+
+## Provider and host update 2026.10.12.1
+
+Install `plugin.video.streamhub/plugin.video.streamhub-2026.10.12.1.zip` and
+restart Kodi once. This package includes the playback fixes above.
+
+**New movie providers:** HDfilme (`hd-filme.lat`) and StreamKiste
+(`streamkiste.bid`). Both are enabled by default under Sources and participate in
+normal movie search and the combined host picker. They are deliberately
+movie-only; no unsupported series/episode mapping is advertised. Search pages
+and host-list extraction were checked online on 2026-10-12 without downloading
+video content. Full playback on the user's Fire TV has not been tested.
+
+**Doodstream:** Updated public domain aliases include `do7go.com`, `ds2video.com`,
+`dsvplay.com`, `d-s.io` and `myvidplay.com`. Complete signed storage URLs are
+preserved, legacy tokens retain their query/expiry format, and public download
+pages can lead to their embed player. Playback keeps the full parent Referer and
+CDN-scoped cookies. Dood playback URLs are not consumed by download probes;
+pre-resolved links older than 60 seconds are refreshed when selected in the
+host picker. These fixes address URL/authentication failures, not server bitrate
+or throughput limits.
+
+**Broader host support:** Additional player parsing covers StreamWish/StreamHG,
+FileLions/VidHide, LuluStream and Uqload families. This handles public video/source
+tags, JWPlayer configuration, literal media URLs, packed source data, and at most
+two iframe hops. Page sizes, request counts and parser work are bounded.
+Protection/login pages are not automatically solved. The host family list is a
+verified domain mapping, not a guarantee that every mirror is currently online.
+
+If the optional **ResolveURL** Kodi add-on is installed and enabled, its host
+plugins are now tried before fetching the same generic embed again, with the
+provider Referer preserved. Disabled host plugins and popup-dependent resolution
+are not enabled automatically. **Sources -> Show host support** shows whether
+ResolveURL is active. StreamHub still has its built-in resolvers when it is absent.
+
+The Movie4k source cap stays at 16, but now keeps one entry per family before
+adding a second entry from the same family, so more alternatives fit in the list.
+
+Research references: [Dood public link formats](https://doodstream.com/api-docs),
+[current Dood resolver behavior](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/doodstream.py),
+[ResolveURL integration](https://github.com/Gujal00/ResolveURL),
+[StreamWish](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/streamwish.py),
+[FileLions/VidHide](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/filelions.py),
+[LuluStream](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/lulustream.py),
+[Uqload](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/uqload.py).

@@ -6,9 +6,9 @@ import time
 import zipfile
 import xml.etree.ElementTree as ET
 
-SRC = r"C:\Users\soldo\Desktop\plugin.video.streamhub"
 REPO = os.path.dirname(os.path.abspath(__file__))
 ADDON_ID = "plugin.video.streamhub"
+SRC = os.path.join(REPO, "src", ADDON_ID)
 OUT = os.path.join(REPO, ADDON_ID)
 
 EXCLUDE_DIRS = {"__pycache__", ".git", ".idea", ".vscode"}
@@ -20,9 +20,7 @@ def version():
 
 
 def build_zip(ver):
-    for old in os.listdir(OUT):
-        if old.endswith(".zip"):
-            os.remove(os.path.join(OUT, old))
+    os.makedirs(OUT, exist_ok=True)
     name = "%s-%s.zip" % (ADDON_ID, ver)
     path = os.path.join(OUT, name)
     n = 0

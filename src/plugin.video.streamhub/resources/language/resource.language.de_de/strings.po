@@ -1,0 +1,285 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.streamhub\n"
+"Report-Msgid-Bugs-To:\n"
+"POT-Creation-Date: 2026-07-05 00:00+0000\n"
+"PO-Revision-Date: 2026-07-05 00:00+0000\n"
+"Last-Translator: cybermodz\n"
+"Language-Team: German\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: de_DE\n"
+
+msgctxt "#30000"
+msgid "General"
+msgstr "Allgemein"
+
+msgctxt "#30001"
+msgid "Sources"
+msgstr "Quellen"
+
+msgctxt "#30002"
+msgid "Playback"
+msgstr "Wiedergabe"
+
+msgctxt "#30003"
+msgid "Maintenance"
+msgstr "Wartung"
+
+msgctxt "#30004"
+msgid "IPTV portal (Stalker)"
+msgstr "IPTV-Portal (Stalker)"
+
+msgctxt "#30010"
+msgid "Preferred language"
+msgstr "Bevorzugte Sprache"
+
+msgctxt "#30011"
+msgid "Streams in this language are ranked first and played automatically when available."
+msgstr "Streams in dieser Sprache werden zuerst gelistet und automatisch gestartet, wenn verfügbar."
+
+msgctxt "#30012"
+msgid "German"
+msgstr "Deutsch"
+
+msgctxt "#30013"
+msgid "English"
+msgstr "Englisch"
+
+msgctxt "#30014"
+msgid "French"
+msgstr "Französisch"
+
+msgctxt "#30015"
+msgid "Italian"
+msgstr "Italienisch"
+
+msgctxt "#30016"
+msgid "Spanish"
+msgstr "Spanisch"
+
+msgctxt "#30017"
+msgid "Turkish"
+msgstr "Türkisch"
+
+msgctxt "#30018"
+msgid "No preference"
+msgstr "Keine Bevorzugung"
+
+msgctxt "#30020"
+msgid "Always ask which host to use"
+msgstr "Immer nach Hoster fragen"
+
+msgctxt "#30021"
+msgid "Off: the best working stream starts automatically. On: you pick the host every time."
+msgstr "Aus: der beste funktionierende Stream startet automatisch. An: du wählst jedes Mal selbst."
+
+msgctxt "#30022"
+msgid "Install updates automatically"
+msgstr "Updates automatisch installieren"
+
+msgctxt "#30023"
+msgid "Check for updates on every Kodi start"
+msgstr "Bei jedem Kodi-Start nach Updates suchen"
+
+msgctxt "#30024"
+msgid "Check for updates now"
+msgstr "Jetzt nach Update suchen"
+
+msgctxt "#30030"
+msgid "VAVOO"
+msgstr "VAVOO"
+
+msgctxt "#30031"
+msgid "livetv.sx (sport events)"
+msgstr "livetv.sx (Sport-Events)"
+
+msgctxt "#30032"
+msgid "67movies / 111movies"
+msgstr "67movies / 111movies"
+
+msgctxt "#30033"
+msgid "ramoflix.net"
+msgstr "ramoflix.net"
+
+msgctxt "#30034"
+msgid "filmpalast.to"
+msgstr "filmpalast.to"
+
+msgctxt "#30035"
+msgid "kinox.to"
+msgstr "kinox.to"
+
+msgctxt "#30036"
+msgid "DaddyLive (DLHD) is always enabled and provides live channels plus the sport schedule."
+msgstr "DaddyLive (DLHD) ist immer aktiv und liefert Live-Sender sowie den Sport-Zeitplan."
+
+msgctxt "#30037"
+msgid "Choose VAVOO channel groups"
+msgstr "VAVOO Kanalgruppen wählen"
+
+msgctxt "#30040"
+msgid "Verify streams before playing"
+msgstr "Streams vor dem Abspielen prüfen"
+
+msgctxt "#30041"
+msgid "Resolves and tests each host so dead streams are never offered. Slightly slower, much more reliable."
+msgstr "Löst jeden Hoster auf und testet ihn, damit tote Streams nie angeboten werden. Etwas langsamer, deutlich zuverlässiger."
+
+msgctxt "#30042"
+msgid "Live: always ask which host to use"
+msgstr "Live: immer nach Hoster fragen"
+
+msgctxt "#30043"
+msgid "Live: test hosts before showing them"
+msgstr "Live: Hoster vor der Anzeige testen"
+
+msgctxt "#30044"
+msgid "HLS player"
+msgstr "HLS-Player"
+
+msgctxt "#30045"
+msgid "Maximum quality"
+msgstr "Maximale Qualität"
+
+msgctxt "#30046"
+msgid "Show number of sources in channel name"
+msgstr "Anzahl der Quellen im Sendernamen anzeigen"
+
+msgctxt "#30050"
+msgid "Debug logging"
+msgstr "Debug-Protokollierung"
+
+msgctxt "#30051"
+msgid "Compress cache"
+msgstr "Cache komprimieren"
+
+msgctxt "#30052"
+msgid "Clear cache"
+msgstr "Cache löschen"
+
+msgctxt "#30053"
+msgid "Clear DLHD channel cache"
+msgstr "DLHD-Kanal-Cache löschen"
+
+msgctxt "#30054"
+msgid "Export channels as m3u"
+msgstr "Sender als m3u exportieren"
+
+msgctxt "#30055"
+msgid "Remove all TV favourites"
+msgstr "Alle TV-Favoriten entfernen"
+
+msgctxt "#30060"
+msgid "Use IPTV portal"
+msgstr "IPTV-Portal verwenden"
+
+msgctxt "#30061"
+msgid "Portal URL"
+msgstr "Portal-URL"
+
+msgctxt "#30062"
+msgid "MAC address"
+msgstr "MAC-Adresse"
+
+msgctxt "#30063"
+msgid "Choose portal"
+msgstr "Portal wählen"
+
+msgctxt "#30064"
+msgid "New MAC address"
+msgstr "Neue MAC-Adresse"
+
+msgctxt "#30065"
+msgid "Choose channel groups"
+msgstr "Kanalgruppen wählen"
+
+msgctxt "#30066"
+msgid "Portal check retries"
+msgstr "Portal-Prüfversuche"
+
+msgctxt "#30067"
+msgid "Channel cache (hours)"
+msgstr "Kanal-Cache (Stunden)"
+
+msgctxt "#30038"
+msgid "movie4k.sx"
+msgstr "movie4k.sx"
+
+msgctxt "#30039"
+msgid "kinox.to blocks automated access to its hoster links (anti-bot redirect). Search works, but streams usually cannot be extracted. Off by default."
+msgstr "kinox.to blockiert automatisierte Zugriffe auf die Hoster-Links (Anti-Bot-Weiterleitung). Die Suche funktioniert, Streams lassen sich meist nicht extrahieren. Standardmäßig aus."
+
+msgctxt "#30070"
+msgid "Video buffer (RAM)"
+msgstr "Video-Puffer (RAM)"
+
+msgctxt "#30071"
+msgid "Sets Kodi's file buffer to bridge brief network slowdowns. Kodi 21+: active for the next stream. Older Kodi: restart required. InputStream add-ons use separate buffers. More RAM cannot fix an overloaded host."
+msgstr "Puffert kurze Netzwerkschwankungen ab. Ab Kodi 21 beim nächsten Stream wirksam, bei älteren Versionen nach Neustart. InputStream-Add-ons nutzen eigene Puffer. Mehr RAM behebt keinen überlasteten Hoster."
+
+msgctxt "#30072"
+msgid "Use Kodi settings (restore previous values)"
+msgstr "Kodi-Einstellungen (vorherige Werte wiederherstellen)"
+
+msgctxt "#30073"
+msgid "64 MB (Fire TV / limited RAM)"
+msgstr "64 MB (Fire TV / wenig RAM)"
+
+msgctxt "#30074"
+msgid "128 MB"
+msgstr "128 MB"
+
+msgctxt "#30075"
+msgid "256 MB (devices with ample free RAM)"
+msgstr "256 MB (Geräte mit viel freiem RAM)"
+
+msgctxt "#30076"
+msgid "Show buffer status"
+msgstr "Puffer-Status anzeigen"
+
+msgctxt "#30077"
+msgid "Fresh start for every stream"
+msgstr "Frischer Start für jeden Stream"
+
+msgctxt "#30078"
+msgid "Clears cached host results when the add-on is reopened, and drops the alive/dead verdicts plus any still-running stream before a new one starts. Turn off to keep results cached for faster repeat starts."
+msgstr "Leert zwischengespeicherte Hoster-Ergebnisse beim erneuten Öffnen des Addons und verwirft die OK/tot-Bewertungen sowie einen noch laufenden Stream, bevor ein neuer startet. Zum schnelleren Wiederstart ausschalten."
+
+msgctxt "#30079"
+msgid "Resume & mark watched"
+msgstr "Fortsetzen & als gesehen markieren"
+
+msgctxt "#30080"
+msgid "Remembers where you stopped a movie or episode and resumes there next time. Fully watched titles get a checkmark; partly watched ones show a progress badge. Right-click a movie to toggle watched."
+msgstr "Merkt sich, wo du einen Film oder eine Episode gestoppt hast, und setzt dort fort. Vollständig gesehene Titel erhalten ein Häkchen, teilweise gesehene ein Fortschrittssymbol. Rechtsklick auf einen Film schaltet gesehen um."
+
+msgctxt "#30081"
+msgid "Auto-play next episode"
+msgstr "Nächste Episode automatisch abspielen"
+
+msgctxt "#30082"
+msgid "When an episode finishes, automatically start the next one in the season."
+msgstr "Wenn eine Episode endet, automatisch die nächste der Staffel starten."
+
+msgctxt "#30083"
+msgid "Show Live TV"
+msgstr "Live-TV anzeigen"
+
+msgctxt "#30084"
+msgid "Show the Live TV section (channels and sport) on the main menu. Off by default."
+msgstr "Zeigt den Live-TV-Bereich (Kanäle und Sport) im Hauptmenü. Standardmäßig aus."
+
+
+msgctxt "#30087"
+msgid "Show host support"
+msgstr "Hoster-Unterstützung anzeigen"
+
+msgctxt "#30085"
+msgid "HDfilme"
+msgstr "HDfilme"
+
+msgctxt "#30086"
+msgid "StreamKiste"
+msgstr "StreamKiste"

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="plugin.video.streamhub" name="StreamHub" version="2026.10.12.1" provider-name="cybermodz">
+	<requires>
+		<!-- xbmc.python 3.0.0 covers Kodi 19 (Matrix) and up. -->
+		<import addon="xbmc.python" version="3.0.0"/>
+		<import addon="inputstream.adaptive" optional="true"/>
+		<import addon="inputstream.ffmpegdirect" optional="true"/>
+		<import addon="script.module.resolveurl" optional="true"/>
+		<import addon="script.module.infotagger" optional="true"/>
+		<import addon="script.module.dateutil" optional="true"/>
+		<import addon="script.module.requests" optional="true"/>
+	</requires>
+	<extension point="xbmc.python.pluginsource" library="resources/main.py">
+		<provides>video</provides>
+	</extension>
+	<extension point="xbmc.python.module" library="resources" />
+	<extension point="xbmc.service" library="resources/service.py" start="startup"/>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en">StreamHub Video Add-on</summary>
+		<description lang="en">Live TV, movies and series with xstream-style multi-source host selection. Live: VAVOO, DaddyLive (DLHD) + Soccer schedule, Stalker. Movies/Series across VAVOO + 67movies + ramoflix + filmpalast + kinox + HDfilme + StreamKiste (movies). Resolved via resolveurl + best-effort embed extractors.</description>
+		<summary lang="de_DE">StreamHub Video Add-on</summary>
+		<description lang="de_DE">Live-TV, Filme und Serien mit xstream-Stil Hoster-Auswahl. Live: VAVOO, DaddyLive (DLHD) + Soccer-Schedule, Stalker. Filme/Serien aus VAVOO + 67movies + ramoflix + filmpalast + kinox; zusätzlich HDfilme + StreamKiste für Filme. Auflösung via resolveurl + Embed-Extraktoren.</description>
+		<platform>all</platform>
+		<assets>
+			<icon>icon.png</icon>
+		</assets>
+	</extension>
+</addon>
