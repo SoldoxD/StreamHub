@@ -150,3 +150,31 @@ Research references: [Dood public link formats](https://doodstream.com/api-docs)
 [FileLions/VidHide](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/filelions.py),
 [LuluStream](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/lulustream.py),
 [Uqload](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/uqload.py).
+
+## Playback hotfix 2026.10.12.2
+
+This fixes two reproducible issues investigated after the report that
+Spider-Man: Brand New Day (2026) showed hosts but would not start:
+
+- The VOE mirror returned by StreamKiste uses `goofy-banana.com` and redirects
+  to `megankiddifference.com`. These domains now reach the existing VOE decoder
+  before the generic player parser, so its public example-video URL is not
+  selected instead of the film's encoded source.
+- Stream verification now recognizes short HLS/DASH manifests from their
+  leading content signatures, including extensionless playlist URLs. It no
+  longer rejects a valid master playlist merely because it is under 1 KiB,
+  or mistakes a signed MP4 query parameter containing `.m3u8` for HLS.
+  HTML/JSON error responses remain rejected and request limits are retained.
+
+Live metadata checks found the correct StreamKiste film with four host links.
+After the routing fix, its VOE mirror returned HTTP 200 with a 694-byte HLS master
+playlist containing `#EXTM3U` and `#EXT-X-STREAM-INF`, using the resolver headers.
+The Mixdrop resolver produced a video URL accepted with HTTP 200 and video/mp4
+in a HEAD-only check. The offered Dood and Dropload pages presented protection
+checks, so those mirrors could not be verified as playable. No film segments
+were downloaded and full playback on the user's Fire TV is still untested.
+
+Install the newest update, restart Kodi, and select the StreamKiste VOE mirror
+(`goofy-banana.com`) or Mixdrop (`mxdrop.to`) when retesting this title.
+
+Alias reference: [maintained VOE host resolver](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/voesx.py).

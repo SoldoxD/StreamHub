@@ -1517,7 +1517,10 @@ def _verify_stream(url, headers_qs, host=None):
 		hdrs = {"User-Agent": UA}
 		if headers_qs:
 			hdrs.update(dict(parse_qsl(headers_qs, keep_blank_values=True)))
-		is_hls = ".m3u8" in low
+		path = urlparse(url).path.lower()
+		is_hls = path.endswith(".m3u8") or ("hls" in path.split("/")
+		                                      and "." not in path.rsplit("/", 1)[-1])
+		is_dash = path.endswith(".mpd")
 		probe = 8192 if is_hls else _PROBE_BYTES
 		hdrs["Range"] = "bytes=0-%d" % (probe - 1)
 		t0 = time.time()
@@ -1526,14 +1529,29 @@ def _verify_stream(url, headers_qs, host=None):
 		elapsed = max(time.time() - t0, 0.001)
 		if r.status_code in (200, 206):
 			body = r.content or b""
-			if is_hls:
-				txt = r.text[:2000]
-				if txt and not (("#EXTM3U" in txt) or ("#EXT-X" in txt)):
-					return False
-				return True
-			if len(body) < 1024:
+			response_headers = getattr(r, "headers", {}) or {}
+			content_type = (response_headers.get("Content-Type") or
+			                response_headers.get("content-type") or "").lower().split(";", 1)[0].strip()
+			head = body.lstrip()
+			if head.startswith(b"\xef\xbb\xbf"):
+				head = head[3:].lstrip()
+			if (content_type in ("text/html", "application/xhtml+xml", "application/json")
+			        or content_type.endswith("+json")
+			        or head[:5].lower() in (b"<html", b"<!doc")):
 				return False
-			if body[:1].isdigit() or body.lstrip()[:5].lower() in (b"<html", b"<!doc"):
+			# Master playlists and MPDs can be tiny and need not have an extension.
+			# A manifest marker in an error page is not a leading manifest signature.
+			if re.match(br"#EXTM3U(?:\s|$)", head):
+				return True
+			if re.match(br"(?:<\?xml[^>]*>\s*)?(?:<!--.*?-->\s*)*"
+			            br"<(?:[A-Za-z_][\w.-]*:)?MPD(?:\s|>)", head[:8192], re.S):
+				return True
+			manifest_types = ("application/vnd.apple.mpegurl", "application/x-mpegurl",
+			                  "audio/mpegurl", "audio/x-mpegurl", "application/dash+xml")
+			if (content_type in manifest_types
+			        or ((is_hls or is_dash) and not content_type.startswith("video/"))):
+				return False
+			if len(body) < 1024 or body[:1].isdigit():
 				return False
 			if host is not None and len(body) >= 16384:
 				host["_kbps"] = int((len(body) / 1024.0) / elapsed)

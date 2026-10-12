@@ -58,6 +58,64 @@ class MovieTests(unittest.TestCase):
         self.assertEqual(request.call_args.kwargs['headers']['User-Agent'], 'Agent One')
         self.assertEqual(request.call_args.kwargs['max_bytes'], 8192)
 
+    def test_short_extensionless_hls_survives_resolution_verification(self):
+        url = 'https://cdn.invalid/manifest?id=abc'
+        body = b'#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\n720/index.m3u8\n'
+        self.movies.request = Mock(return_value=types.SimpleNamespace(
+            status_code=200, content=body, headers={'Content-Type': 'application/vnd.apple.mpegurl'}))
+        self.movies._resolve_host = Mock(return_value=(url, 'Referer=https%3A%2F%2Fhost.invalid%2Fe%2Fa'))
+        host = {'url': 'https://host.invalid/e/a'}
+        resolved_host, stream = self.movies._resolve_and_verify(host)
+        self.assertIs(resolved_host, host)
+        self.assertEqual(stream[0], url)
+        self.assertIs(host['_alive'], True)
+        self.assertLess(len(body), 1024)
+        self.assertEqual(self.movies.request.call_args.kwargs['max_bytes'], 65536)
+
+    def test_extensionless_hls_signature_with_bom_and_plain_text_mime(self):
+        body = b'\xef\xbb\xbf \r\n#EXTM3U\n#EXT-X-TARGETDURATION:6\npart.ts\n'
+        self.movies.request = Mock(return_value=types.SimpleNamespace(
+            status_code=200, content=body, headers={'content-type': 'text/plain; charset=utf-8'}))
+        self.assertTrue(self.movies._verify_stream('https://cdn.invalid/hls/token', None))
+        self.assertEqual(self.movies.request.call_args.kwargs['max_bytes'], 8192)
+
+    def test_m3u8_query_value_does_not_turn_mp4_into_manifest(self):
+        body = b'\x00\x00\x00\x18ftypisom' + b'\x00' * 2048
+        url = 'https://cdn.invalid/video.mp4?return=https%3A%2F%2Fexample.invalid%2Fmaster.m3u8'
+        self.movies.request = Mock(return_value=types.SimpleNamespace(
+            status_code=206, content=body, headers={'Content-Type': 'video/mp4'}))
+        self.assertTrue(self.movies._verify_stream(url, None))
+        self.assertEqual(self.movies.request.call_args.args, ('GET', url))
+        self.assertEqual(self.movies.request.call_args.kwargs['max_bytes'], 65536)
+
+    def test_short_extensionless_dash_manifest_is_not_rejected_by_size(self):
+        body = b'<?xml version="1.0"?>\n<MPD xmlns="urn:mpeg:dash:schema:mpd:2011"><Period/></MPD>'
+        self.movies.request = Mock(return_value=types.SimpleNamespace(
+            status_code=200, content=body, headers={'Content-Type': 'application/dash+xml'}))
+        self.assertTrue(self.movies._verify_stream('https://cdn.invalid/manifest?id=dash', None))
+        self.assertEqual(self.movies.request.call_args.kwargs['max_bytes'], 65536)
+
+    def test_manifest_error_responses_are_not_playable(self):
+        cases = [
+            ('application/vnd.apple.mpegurl', b'<html><script>var example="#EXTM3U";</script></html>'),
+            ('text/html', b'#EXTM3U\n<html>Temporarily unavailable</html>'),
+            ('application/vnd.apple.mpegurl', b'<!--error-->Not found #EXTM3U'),
+            ('application/dash+xml', b'<?xml version="1.0"?><Error>Access denied</Error>'),
+            ('application/json', b'{"error":"temporarily unavailable"}' + b' ' * 2048),
+            ('application/vnd.apple.mpegurl', b''),
+        ]
+        for content_type, body in cases:
+            with self.subTest(content_type=content_type, body=body[:80]):
+                self.movies.request = Mock(return_value=types.SimpleNamespace(
+                    status_code=200, content=body, headers={'Content-Type': content_type}))
+                self.assertFalse(self.movies._verify_stream('https://cdn.invalid/master.m3u8', None))
+
+    def test_manifest_looking_url_can_redirect_to_mp4(self):
+        self.movies.request = Mock(return_value=types.SimpleNamespace(
+            status_code=200, content=b'\x00\x00\x00\x18ftypisom' + b'\x00' * 2048,
+            headers={'Content-Type': 'video/mp4'}))
+        self.assertTrue(self.movies._verify_stream('https://cdn.invalid/master.m3u8', None))
+
     def test_movie_setup_keeps_segment_auth_and_passes_clean_path(self):
         item = Mock()
         self.movies.ListItem = Mock(return_value=item)

@@ -25,7 +25,8 @@ def _hdr_qs(referer_origin):
 
 
 VOE_HOSTS = ("voe.sx", "voe-un", "voe-net", "voe-net", "voeun", "voeunblock",
-             "voe-network", "cloudwindow")
+             "voe-network", "cloudwindow", "goofy-banana.com",
+             "megankiddifference.com")
 
 # Public Dood aliases documented by the maintained ResolveURL host registry.
 DOOD_HOSTS = (
@@ -64,17 +65,31 @@ def _voe_decode(raw):
 	return _json.loads(final)
 
 
+def is_voe_url(url):
+	try:
+		parsed = urlparse(url)
+		host = (parsed.hostname or "").lower().rstrip(".")
+		if parsed.scheme not in ("http", "https"):
+			return False
+		return any((host == marker or host.endswith("." + marker))
+		           if "." in marker else marker in host for marker in VOE_HOSTS)
+	except ValueError:
+		return False
+
+
 def resolve_voe(url):
 	try:
 		r = request("GET", url, headers=_hdr("https://voe.sx/"),
-		            timeout=8, retries=1, allow_redirects=True)
+		            timeout=8, retries=1, allow_redirects=True, max_bytes=1024 * 1024)
 		html = r.text
+		seen = {url, r.url}
 		for _ in range(3):
 			mred = re.search(r"window\.location\.href\s*=\s*'(https?://[^']+)'", html)
-			if not mred or mred.group(1) in r.url:
+			if not mred or mred.group(1) in seen:
 				break
 			r = request("GET", mred.group(1), headers=_hdr("https://voe.sx/"),
-			            timeout=15, retries=2, allow_redirects=True)
+			            timeout=8, retries=1, allow_redirects=True, max_bytes=1024 * 1024)
+			seen.update((mred.group(1), r.url))
 			html = r.text
 		m = re.search(
 			r'<script type="application/json"[^>]*>\s*(\[.*?\]|".*?")\s*</script>',
@@ -606,7 +621,7 @@ def resolve(url, referer=None, generic=True):
 		res = resolve_filemoon(url)
 		if res:
 			return res
-	if _match(url, VOE_HOSTS):
+	if is_voe_url(url):
 		res = resolve_voe(url)
 		if res:
 			return res
