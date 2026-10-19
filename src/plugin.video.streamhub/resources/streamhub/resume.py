@@ -242,7 +242,7 @@ def next_up(tmdb_id, title=None):
 	return None
 
 
-def announce_playing(item):
+def announce_playing(item, expected_url=None):
 	if not enabled():
 		home.clearProperty(_PROP)
 		return
@@ -253,6 +253,8 @@ def announce_playing(item):
 		payload = {"key": key,
 		           "title": item.get("title") or item.get("name") or "",
 		           "resume": resume_seconds(key)}
+		if expected_url:
+			payload["expected_url"] = str(expected_url).split("|", 1)[0]
 		home.setProperty(_PROP, json.dumps(payload))
 	except Exception:
 		log("resume announce failed\n%s" % format_exc())

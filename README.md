@@ -317,3 +317,51 @@ compilation passed, and independent cross-review covered the changed transport,
 service, playback, provider and live-selection paths. The suite includes a local
 HTTP server proving redirected HEAD remains HEAD, no-follow requests retain
 cookies, and bounded compressed responses stay within their decoded size limit.
+
+
+## Optional automatic host recovery 2026.10.19.3
+
+Update StreamHub and restart Kodi. In **Settings → Playback**, enable
+**Automatically switch host when buffering** (German:
+**Bei Pufferung automatisch Hoster wechseln**). It is **off by default** and
+applies to movies and episodes. Choose **Preferred language** under General;
+German is the default, and **No preference** permits every audio language.
+
+- After 20 seconds of continuous buffering with no playback progress, StreamHub
+  resolves another source for the same movie or episode in the background.
+  Startup, pauses, seeking and fast-forward/rewind do not trigger recovery.
+  The current stream keeps playing while a replacement is being resolved;
+  recovery is canceled if it starts progressing again.
+- A replacement starts at the saved timestamp, even with persistent resume
+  tracking disabled. It must report compatible audio, have a compatible known
+  duration, reach the requested position and start advancing before the handoff
+  is accepted. An unconfirmed or failed replacement is skipped. If candidates
+  are exhausted after a handoff starts, StreamHub attempts to restore the
+  previous source once. An unrecoverable failure displays a notification.
+- Provider audio labels are checked before selection; German subtitle labels
+  such as `DE-SUB` do not count as German audio. Kodi's reported audio tracks are
+  checked after opening and a matching track is selected when available.
+  Initial playback reports when the preferred audio language cannot be
+  confirmed; automatic replacements with unknown/wrong audio are rejected.
+  This checks metadata, not speech recognition, so mislabeled audio remains a
+  limitation.
+- Recovery is bounded to six candidate resolutions and three accepted host
+  changes per playback session, with a cooldown between accepted changes.
+  Stopping, changing titles, seeking, pausing or disabling the toggle cancels
+  pending recovery. Background maintenance waits during a handoff, and failed
+  candidates cannot mark a title watched or trigger the next episode.
+
+Switching requires a brief loading pause. Different cuts, intros and recaps can
+make the same timestamp show a different scene; a duration check cannot detect
+every such difference. Live TV is excluded because an equivalent seek position
+is not generally available. This does not fix network outages or decoder
+stutter, and there has been no live Fire TV playback test.
+
+Kodi references: [player state conditions](https://kodi.wiki/view/List_of_boolean_conditions),
+[playback callbacks](https://xbmc.github.io/docs.kodi.tv/master/kodi-dev-kit/group__python___player_c_b.html),
+and [audio stream selection](https://xbmc.github.io/docs.kodi.tv/master/kodi-dev-kit/group__python___player.html).
+
+Validation: **377 offline tests passed**, including 37 controller scenarios and
+service integration tests for callback ordering, cancellation, language checks,
+resume position, failed replacements and background maintenance. Python 3.9
+compilation and the release ZIP/source, settings and checksum checks passed.

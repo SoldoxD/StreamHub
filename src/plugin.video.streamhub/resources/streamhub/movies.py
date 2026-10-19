@@ -1,6 +1,7 @@
 
 from threading import Event
 from streamhub.source_selection import select_diverse
+from streamhub.language import provider_audio_languages, normalize_language
 
 from streamhub.utils import *
 from streamhub.playback import configure_playback, split_stream_url, max_height
@@ -1140,12 +1141,10 @@ def _lang_rank(h):
 	want = pref_lang()
 	if not want:
 		return 0
-	lang = (h.get("lang") or "").upper()
-	if want in lang:
+	languages = provider_audio_languages(h)
+	if normalize_language(want) in languages:
 		return 0
-	if not lang or lang == "OV":
-		return 2
-	return 1
+	return 1 if languages else 2
 
 
 _QUALITY_TIERS = (
@@ -1457,7 +1456,7 @@ def choose_and_play(item, all_hosts, heading, prog, host_select, deep_check):
 			if stream is None or (resolved_at is not None and time.monotonic() - resolved_at >= 60):
 				stream = _resolve_host(host)
 			if stream:
-				_start_playback(item, host, stream)
+				_start_playback(item, host, stream, all_hosts)
 				return True
 			protected = _host_protected(host)
 			host["_alive"] = None if protected else False
@@ -1516,7 +1515,7 @@ def choose_and_play(item, all_hosts, heading, prog, host_select, deep_check):
 			if _picker_loop([(h, None) for h in rest], "Hoster wählen"):
 				return
 	if stream:
-		_start_playback(item, chosen, stream)
+		_start_playback(item, chosen, stream, all_hosts)
 		return
 	fail_resolved(_unplayable_message(all_hosts))
 
@@ -1888,7 +1887,24 @@ def _resolve_embed(host, stop=None):
 
 
 
-def _start_playback(movie, host, stream):
+def resolve_failover_candidate(host, stop):
+	"""Resolve a fresh source in the service worker, without a picker or UI."""
+	if stop.is_set():
+		return None
+	# Signed URLs and previous alive verdicts must never survive a handoff.
+	fresh = {key: value for key, value in host.items() if not key.startswith("_")}
+	if not _within_quality_limit([fresh]):
+		return None
+	_, stream = _resolve_and_verify(fresh, stop=stop)
+	if not stream or stop.is_set():
+		return None
+	url, headers = split_stream_url(*stream)
+	if urlparse(url).scheme.lower() not in ("http", "https"):
+		return None
+	return url, headers
+
+
+def _start_playback(movie, host, stream, all_hosts=None):
 	url, headers = stream
 	o = ListItem(movie.get("title", "Movie"))
 	o.setProperty("IsPlayable", "true")
@@ -1903,7 +1919,12 @@ def _start_playback(movie, host, stream):
 	try:
 		from streamhub import resume
 		resume.apply_resume(o, movie)
-		resume.announce_playing(movie)
+		resume.announce_playing(movie, expected_url=url)
 	except Exception:
 		log(format_exc())
+	try:
+		from streamhub import failover
+		failover.announce(movie, host, all_hosts or [host], url)
+	except Exception:
+		log("failover context unavailable")
 	play_directly(url, o)

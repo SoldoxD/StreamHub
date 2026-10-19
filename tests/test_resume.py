@@ -49,6 +49,13 @@ class ResumeTests(unittest.TestCase):
         self.resume._load.assert_called_once()
         item.setProperty.assert_any_call("ResumeTime", "100")
 
+    def test_announcement_pairs_resume_with_media_without_auth_headers(self):
+        self.resume.announce_playing({"tmdb_id": 123, "title": "Film"},
+                                    expected_url="https://cdn.invalid/movie.mp4|Cookie=secret")
+        payload = json.loads(self.home.setProperty.call_args.args[1])
+        self.assertEqual(payload["key"], "t123")
+        self.assertEqual(payload["expected_url"], "https://cdn.invalid/movie.mp4")
+
     def test_invalid_saved_position_does_not_break_resume(self):
         self.resume._load = Mock(return_value={"t123": {"pos": "broken"}})
         self.assertEqual(self.resume.resume_seconds("t123"), 0)

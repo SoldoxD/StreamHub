@@ -294,3 +294,35 @@ msgstr "Movie2k"
 msgctxt "#30090"
 msgid "Einschalten"
 msgstr "Einschalten"
+
+msgctxt "#30091"
+msgid "Automatically switch host when buffering"
+msgstr ""
+
+msgctxt "#30092"
+msgid "For movies and episodes: after 20 seconds of stalled buffering, try another source and resume at the same timestamp. Uses your preferred language and checks reported audio tracks. Off by default. Different edits may not align exactly."
+msgstr ""
+
+msgctxt "#30093"
+msgid "Buffering: checking another host…"
+msgstr ""
+
+msgctxt "#30094"
+msgid "Playback continued on another host."
+msgstr ""
+
+msgctxt "#30095"
+msgid "No compatible replacement found."
+msgstr ""
+
+msgctxt "#30096"
+msgid "Returning to the previous host."
+msgstr ""
+
+msgctxt "#30097"
+msgid "Playback could not be restored. Please choose another host."
+msgstr ""
+
+msgctxt "#30098"
+msgid "Preferred audio language could not be confirmed."
+msgstr ""

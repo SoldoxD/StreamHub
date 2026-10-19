@@ -216,6 +216,11 @@
 					<default>true</default>
 					<control type="toggle"/>
 				</setting>
+				<setting id="auto_host_failover" type="boolean" label="30091" help="30092">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="autoplay_next" type="boolean" label="30081" help="30082">
 					<level>0</level>
 					<default>true</default>

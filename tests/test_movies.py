@@ -44,9 +44,65 @@ class MovieTests(unittest.TestCase):
         self.modules.start()
         self.addCleanup(self.modules.stop)
         sys.modules['streamhub.source_selection'] = load('streamhub.source_selection', 'source_selection.py')
+        sys.modules['streamhub.language'] = load('streamhub.language', 'language.py')
         self.playback = load('streamhub.playback', 'playback.py')
         sys.modules['streamhub.playback'] = self.playback
         self.movies = load('movie_regressions', 'movies.py')
+
+    def test_language_ranking_does_not_confuse_subtitles_with_audio(self):
+        self.assertEqual(self.movies._lang_rank({'lang': 'DE-SUB'}), 2)
+        self.assertEqual(self.movies._lang_rank({'lang': 'GER'}), 0)
+        self.assertEqual(self.movies._lang_rank({'lang': 'EN / DE-SUB'}), 1)
+        self.assertEqual(self.movies._lang_rank({'title': 'German Movie'}), 2)
+        self.settings['pref_lang'] = 'any'
+        self.assertEqual(self.movies._lang_rank({'lang': 'EN'}), 0)
+
+    def test_playback_announces_all_alternatives_with_configured_path(self):
+        self.movies.ListItem = Mock(return_value=Mock())
+        self.movies.ListItemInfoTag = Mock()
+        self.movies.play_directly = Mock()
+        announce = Mock()
+        hosts = [{'url': 'https://host.invalid/a'}, {'url': 'https://other.invalid/b'}]
+        movie = {'title': 'Film', 'season': 0, 'episode': 1}
+        with patch.dict(sys.modules, {'streamhub.failover': types.SimpleNamespace(announce=announce)}):
+            self.movies._start_playback(movie, hosts[0], ('https://cdn.invalid/master.m3u8', None), hosts)
+        announce.assert_called_once_with(movie, hosts[0], hosts, 'https://cdn.invalid/master.m3u8')
+
+    def test_failover_resolves_fresh_and_preserves_auth_headers(self):
+        source = {'url': 'https://host.invalid/a', 'lang': 'DE', '_alive': False,
+                  '_stream': ('https://expired.invalid/old', None), '_resolved_at': 0}
+        self.movies._resolve_and_verify = Mock(return_value=(source, (
+            'https://cdn.invalid/new.mp4|Cookie=a%2Bb', 'Referer=https%3A%2F%2Fhost.invalid')))
+        result = self.movies.resolve_failover_candidate(source, threading.Event())
+        fresh = self.movies._resolve_and_verify.call_args.args[0]
+        self.assertEqual(fresh, {'url': 'https://host.invalid/a', 'lang': 'DE'})
+        self.assertIn('_stream', source)
+        self.assertEqual(result[0], 'https://cdn.invalid/new.mp4')
+        self.assertEqual(dict(parse_qsl(result[1])), {'Referer': 'https://host.invalid', 'Cookie': 'a+b'})
+
+    def test_cancelled_failover_never_probes_and_discards_late_results(self):
+        stop = threading.Event()
+        stop.set()
+        self.movies._resolve_and_verify = Mock()
+        self.assertIsNone(self.movies.resolve_failover_candidate({}, stop))
+        self.movies._resolve_and_verify.assert_not_called()
+        stop.clear()
+        def late(*args, **kwargs):
+            stop.set()
+            return {}, ('https://cdn.invalid/new.mp4', None)
+        self.movies._resolve_and_verify.side_effect = late
+        self.assertIsNone(self.movies.resolve_failover_candidate({}, stop))
+
+    def test_failover_rejects_non_media_protocols(self):
+        self.movies._resolve_and_verify = Mock(return_value=({}, ('plugin://other/addon', None)))
+        self.assertIsNone(self.movies.resolve_failover_candidate({}, threading.Event()))
+
+    def test_failover_honors_resolution_limit_changed_during_playback(self):
+        self.settings['stream_quali'] = '2'
+        self.movies._resolve_and_verify = Mock()
+        host = {'url': 'https://host.invalid/a', 'quality': '1080p'}
+        self.assertIsNone(self.movies.resolve_failover_candidate(host, threading.Event()))
+        self.movies._resolve_and_verify.assert_not_called()
 
     def test_inline_auth_headers_reach_verification_without_changing_signed_url(self):
         url = 'https://cdn.invalid/master.m3u8?sig=a%2Bb&k=x'

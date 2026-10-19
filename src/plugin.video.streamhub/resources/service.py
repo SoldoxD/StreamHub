@@ -274,7 +274,7 @@ def _set_last_check_ts(ts):
 
 def _playback_active():
 	try:
-		return xbmc.Player().isPlaying()
+		return _failover_transition_active() or xbmc.Player().isPlaying()
 	except Exception:
 		# Automatic maintenance can wait if player state is unavailable.
 		return True
@@ -410,6 +410,17 @@ class SettingsMonitor(xbmc.Monitor):
 		self.buffer_changed = True
 
 
+def _failover_transition_active():
+	try:
+		from streamhub.failover import transition_active
+		return bool(transition_active())
+	except ImportError:
+		return False
+	except Exception:
+		# Preserve the last valid position if handoff state is unavailable.
+		return True
+
+
 class ResumeTracker(xbmc.Player):
 	PROP = "streamhub_playing"
 
@@ -431,29 +442,79 @@ class ResumeTracker(xbmc.Player):
 		self._seek_after = 0
 		self._seek_deadline = 0
 		self._seek_requested = False
+		self._transition_seen = False
+		self._active_file = ""
+		self._deferred_av_file = ""
 
-	def _pickup(self):
+	def _handoff_active(self):
+		if _failover_transition_active():
+			self._transition_seen = True
+			return True
+		return False
+
+	def _playing_file(self):
+		try:
+			return self.getPlayingFile() or ""
+		except Exception:
+			return ""
+
+	def _pickup(self, managed_only=False, deferred_file=""):
+		if self._handoff_active():
+			return False
 		try:
 			from streamhub.utils import home
 			import json
 			raw = home.getProperty(self.PROP)
 			if not raw:
-				return
+				return False
 			d = json.loads(raw)
 			if not isinstance(d, dict) or not d.get("key"):
 				home.clearProperty(self.PROP)
-				return
+				return False
+			managed = d.get("managed_resume") is True
+			if managed_only and not managed:
+				return False
+			expected = d.get("expected_url") or ""
+			playing_file = self._playing_file()
+			if (expected and (not isinstance(expected, str) or
+					expected.split("|", 1)[0] != playing_file.split("|", 1)[0])):
+				return False
+			if deferred_file and (not expected or deferred_file != playing_file):
+				return False
+			pending = max(0, int(d.get("resume") or 0))
+			if deferred_file:
+				# The old stop callback was suppressed during the transition.
+				# Save its last valid sample before adopting the new title.
+				self._commit(ended=False)
 			self._reset()
 			self._key = d.get("key") or None
 			self._title = d.get("title", "")
-			self._pending_resume = max(0, int(d.get("resume") or 0))
-			self._seeked = False
+			self._pending_resume = pending
+			# The failover player has already verified language, duration and
+			# the seek. Its late handoff must not trigger another resume seek.
+			self._seeked = managed
+			self._av_started = managed
+			if managed:
+				self._active_file = self._playing_file()
 			home.clearProperty(self.PROP)
+			return True
 		except Exception:
-			pass
+			return False
 
 	def onAVStarted(self):
-		self._pickup()
+		if self._handoff_active():
+			# A user can open another title while the previous handoff is
+			# still active. Keep AV readiness tied to its actual player file.
+			self._deferred_av_file = self._playing_file()
+			return
+		picked = self._pickup()
+		playing_file = self._playing_file()
+		if (not picked and self._av_started and self._active_file
+				and playing_file and self._active_file != playing_file):
+			# An unrelated player start has no StreamHub resume announcement.
+			self._reset()
+			return
+		self._active_file = playing_file
 		self._av_started = True
 		# Kodi may already apply the ListItem resume point. Give it one service
 		# tick, then check the actual position before issuing a fallback seek.
@@ -462,10 +523,14 @@ class ResumeTracker(xbmc.Player):
 		self._seek_deadline = now + 10
 
 	def onPlayBackStarted(self):
+		if self._handoff_active():
+			return
 		if not self._key:
 			self._pickup()
 
 	def onPlayBackSeek(self, time, seekOffset):
+		if self._handoff_active():
+			return
 		if not self._key:
 			return
 		# A user/native seek during startup takes precedence over our fallback.
@@ -503,6 +568,27 @@ class ResumeTracker(xbmc.Player):
 				self._seeked = True
 
 	def sample(self):
+		if self._handoff_active():
+			return
+		had_transition = self._transition_seen
+		managed = self._pickup(managed_only=True)
+		if had_transition and not managed:
+			deferred = self._deferred_av_file
+			try:
+				ready = (deferred and deferred == self._playing_file()
+						and self.isPlaying())
+			except Exception:
+				ready = False
+			if ready and self._pickup(deferred_file=deferred):
+				self._active_file = deferred
+				self._av_started = True
+				self._seek_after = time.monotonic() + 1
+				self._seek_deadline = time.monotonic() + 10
+				return
+			# Canceled/exhausted handoffs have no accepted replacement packet.
+			# Save only the old valid sample, then release its playback identity.
+			self._commit(ended=False)
+			return
 		if not self._key:
 			return
 		try:
@@ -526,6 +612,8 @@ class ResumeTracker(xbmc.Player):
 			pass
 
 	def _flush(self):
+		if self._handoff_active():
+			return
 		if not self._key or not self._sampled:
 			return
 		# Persist a backwards seek below 30s only after saving real progress.
@@ -540,6 +628,8 @@ class ResumeTracker(xbmc.Player):
 			pass
 
 	def _commit(self, ended=False):
+		if self._handoff_active():
+			return
 		if not self._key:
 			return
 		key = self._key
@@ -600,6 +690,13 @@ def main():
 	_log("service started for %s v%s" % (ADDON_ID, _installed_version()))
 	monitor = SettingsMonitor()
 	_add_resources_path()
+	failover = None
+	try:
+		from streamhub.failover import FailoverPlayer
+		failover = FailoverPlayer()
+		_log("host failover monitor active")
+	except Exception as e:
+		_log("host failover monitor unavailable: %s" % e, xbmc.LOGWARNING)
 	# Register callbacks immediately: streams may start during the updater's
 	# startup grace period, and their resume metadata must still be consumed.
 	tracker = None
@@ -615,29 +712,44 @@ def main():
 	if _setting("update_on_start") == "true":
 		next_check = 0
 
-	while not monitor.abortRequested():
-		if tracker is not None:
-			tracker.sample()
-		idle = not _playback_active()
-		if monitor.buffer_changed and idle:
-			monitor.buffer_changed = False
-			_apply_buffer()
-		if idle and time.monotonic() >= startup_until and time.time() >= next_check:
-			result = False
-			try:
-				result = check_for_update()
-			except Exception as e:
-				_log("update check error: %s" % e, xbmc.LOGWARNING)
-			# None means playback started during the check: retry once idle.
-			if result is not None:
-				now = time.time()
-				_set_last_check_ts(now)
-				next_check = now + CHECK_INTERVAL_HOURS * 3600
-		if monitor.waitForAbort(1):
-			break
+	try:
+		while not monitor.abortRequested():
+			if failover is not None:
+				try:
+					failover.sample()
+				except Exception as e:
+					_log("host failover sample failed: %s" % e, xbmc.LOGWARNING)
+			if tracker is not None:
+				tracker.sample()
+			idle = not _playback_active()
+			if monitor.buffer_changed and idle:
+				monitor.buffer_changed = False
+				_apply_buffer()
+			if idle and time.monotonic() >= startup_until and time.time() >= next_check:
+				result = False
+				try:
+					result = check_for_update()
+				except Exception as e:
+					_log("update check error: %s" % e, xbmc.LOGWARNING)
+				# None means playback started during the check: retry once idle.
+				if result is not None:
+					now = time.time()
+					_set_last_check_ts(now)
+					next_check = now + CHECK_INTERVAL_HOURS * 3600
+			if monitor.waitForAbort(1):
+				break
 
-	if tracker is not None:
-		tracker._flush()
+	finally:
+		# Flush before shutdown clears the transition guard, so an unaccepted
+		# replacement can never replace the last valid position on service exit.
+		if tracker is not None:
+			tracker._flush()
+		if failover is not None:
+			try:
+				failover.shutdown()
+			except Exception as e:
+				_log("host failover shutdown failed: %s" % e, xbmc.LOGWARNING)
+
 	_log("service stopped")
 
 
