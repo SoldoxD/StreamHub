@@ -735,7 +735,7 @@ def _gather_episode_hosts(series, season, episode):
 		futs = {ex.submit(p.get_episode_hosts, hit, season, episode): pname
 		        for pname, (p, hit) in hits_by_provider.items()}
 		try:
-			for fut in as_completed(futs, timeout=movies._GATHER_DEADLINE):
+			for fut in movies._completed(futs, movies._GATHER_DEADLINE):
 				if movies._cancelled():
 					break
 				try:
@@ -781,6 +781,7 @@ def play(params):
 
 	cache_key = {"_ep_hosts": series.get("tmdb_id") or series.get("title", ""),
 	             "s": season, "e": episode,
+	             "year": str(series.get("year") or ""), "lang": movies.pref_lang(),
 	             "providers": sorted(provider.name for provider in _enabled_providers())}
 	cacheOk, cached_hosts = get_cache(cache_key)
 	if cacheOk and isinstance(cached_hosts, list) and cached_hosts:

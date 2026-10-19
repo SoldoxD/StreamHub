@@ -262,8 +262,9 @@ def play(params):
 		try:
 			from streamhub.livetv import fetch_links
 			for l in fetch_links(ev["url"]):
-				l["type"] = "%s (LiveTV)" % l.get("type", "?")
-				order.append(l)
+				entry = dict(l)
+				entry["label"] = "%s (LiveTV)" % l.get("type", "?")
+				order.append(entry)
 		except Exception:
 			log(format_exc())
 
@@ -281,6 +282,10 @@ def play(params):
 		return
 	prog.update(30, "%d Stream(s) gefunden" % len(order))
 
+	if prog.iscanceled() or monitor.abortRequested():
+		prog.close()
+		fail_resolved()
+		return
 	host_select = getSetting("movies_host_select") == "true"
 	if host_select and len(order) > 1:
 		prog.close()
@@ -288,18 +293,23 @@ def play(params):
 		for i, l in enumerate(order):
 			lg = l.get("lang") or ""
 			labels.append("%d. %s%s" % (
-				i + 1, l.get("type", "?"),
+				i + 1, l.get("label") or l.get("type", "?"),
 				("  [COLOR yellow][%s][/COLOR]" % lg) if lg else ""))
 		idx = selectDialog(labels, "Stream wählen — %s" % ev.get("title", ""))
 		if idx < 0:
 			fail_resolved()
 			return
 		order = [order[idx]]
+		prog = StatusProgress("StreamHub")
 
 	url, headers, chosen = None, None, None
 	for i, l in enumerate(order):
+		if prog.iscanceled() or monitor.abortRequested():
+			prog.close()
+			fail_resolved()
+			return
 		prog.update(30 + int(60 * (i + 1) / max(len(order), 1)),
-		            "Löse %s auf …" % l.get("type", "?"))
+		            "Löse %s auf …" % (l.get("label") or l.get("type", "?")))
 		try:
 			if l.get("_dlhd"):
 				from streamhub.vjlive import resolve_link as live_resolve
@@ -313,6 +323,10 @@ def play(params):
 		if url:
 			chosen = l
 			break
+	if prog.iscanceled() or monitor.abortRequested():
+		prog.close()
+		fail_resolved()
+		return
 	prog.close()
 
 	if not url:
@@ -326,6 +340,6 @@ def play(params):
 	info_tag.set_info({
 		"title": ev.get("title", ""),
 		"plot": "[B]%s[/B]\nQuelle: %s (livetv.sx)" % (
-			ev.get("title", ""), (chosen or {}).get("type", "?")),
+			ev.get("title", ""), (chosen or {}).get("label") or (chosen or {}).get("type", "?")),
 	})
 	play_directly(url, o)

@@ -130,6 +130,25 @@ class Response:
 
 
 
+class _RedirectHandler(_urlreq.HTTPRedirectHandler):
+	# Python 3.9's urllib does not handle 308, although providers use it.
+	def redirect_request(self, req, fp, code, msg, headers, newurl):
+		redirected = super().redirect_request(req, fp, 307 if code == 308 else code,
+		                                     msg, headers, newurl)
+		if redirected is not None and req.get_method() == "HEAD":
+			# urllib 3.9 otherwise rebuilds this as GET and may download a video
+			# when a status-only probe follows a CDN redirect.
+			redirected.method = "HEAD"
+		return redirected
+
+	http_error_308 = _urlreq.HTTPRedirectHandler.http_error_302
+
+
+class _NoRedirectHandler(_RedirectHandler):
+	def redirect_request(self, req, fp, code, msg, headers, newurl):
+		return None
+
+
 class Session:
 	def __init__(self):
 		self.headers = {}
@@ -137,13 +156,22 @@ class Session:
 
 
 		self._opener_verify = _urlreq.build_opener(
-			_urlreq.HTTPCookieProcessor(self.cookies),
+			_urlreq.HTTPCookieProcessor(self.cookies), _RedirectHandler(),
 		)
 		ctx = ssl.create_default_context()
 		ctx.check_hostname = False
 		ctx.verify_mode = ssl.CERT_NONE
 		self._opener_noverify = _urlreq.build_opener(
-			_urlreq.HTTPCookieProcessor(self.cookies),
+			_urlreq.HTTPCookieProcessor(self.cookies), _RedirectHandler(),
+			_urlreq.HTTPSHandler(context=ctx),
+		)
+		# The redirect inspectors must see Location without opening the host page.
+		# All four openers share cookies, including those set by a 302 response.
+		self._opener_noredirect_verify = _urlreq.build_opener(
+			_urlreq.HTTPCookieProcessor(self.cookies), _NoRedirectHandler(),
+		)
+		self._opener_noredirect_noverify = _urlreq.build_opener(
+			_urlreq.HTTPCookieProcessor(self.cookies), _NoRedirectHandler(),
 			_urlreq.HTTPSHandler(context=ctx),
 		)
 
@@ -171,12 +199,22 @@ class Session:
 		raise TypeError("Unsupported data type: %r" % type(data))
 
 	@staticmethod
-	def _decode_body(raw_bytes, response_headers):
+	def _decode_body(raw_bytes, response_headers, max_bytes=None):
 		enc = (response_headers.get("Content-Encoding")
 		       or response_headers.get("content-encoding") or "").lower()
-		if not raw_bytes:
+		if not raw_bytes or max_bytes == 0:
 			return b""
 		try:
+			if max_bytes is not None:
+				# Some servers ignore Accept-Encoding: identity. Bound decoded data
+				# as well as the wire read, instead of expanding it all in memory.
+				if "gzip" in enc:
+					return zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(raw_bytes, max_bytes)
+				if "deflate" in enc:
+					try:
+						return zlib.decompressobj().decompress(raw_bytes, max_bytes)
+					except zlib.error:
+						return zlib.decompressobj(-zlib.MAX_WBITS).decompress(raw_bytes, max_bytes)
 			if "gzip" in enc:
 				return gzip.decompress(raw_bytes)
 			if "deflate" in enc:
@@ -215,7 +253,10 @@ class Session:
 		for k, v in hdrs.items():
 			req.add_header(k, v)
 
-		opener = self._opener_verify if verify else self._opener_noverify
+		if allow_redirects:
+			opener = self._opener_verify if verify else self._opener_noverify
+		else:
+			opener = self._opener_noredirect_verify if verify else self._opener_noredirect_noverify
 
 		try:
 			to = timeout if timeout is not None else socket._GLOBAL_DEFAULT_TIMEOUT
@@ -235,8 +276,9 @@ class Session:
 		response = Response(None, resp.code, resp_headers, final_url, raw_response=resp)
 		if max_bytes is not None:
 			try:
-				raw = resp.read(max(0, int(max_bytes)))
-				response._content = self._decode_body(raw, resp_headers)
+				limit = max(0, int(max_bytes))
+				raw = resp.read(limit)
+				response._content = self._decode_body(raw, resp_headers, limit)
 			except (URLError, socket.timeout) as e:
 				reason = getattr(e, "reason", e)
 				if isinstance(reason, socket.timeout) or "timed out" in str(reason).lower():

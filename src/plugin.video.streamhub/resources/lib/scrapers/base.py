@@ -209,6 +209,7 @@ class BaseScraper:
 	timeout = DEFAULT_TIMEOUT
 	retries = DEFAULT_RETRIES
 	delay_range = (0, 0)
+	response_limit = 2 * 1024 * 1024
 
 	def __init__(self, token=None):
 		self.token = token or NULL_TOKEN
@@ -225,12 +226,22 @@ class BaseScraper:
 		h.update(extra)
 		return h
 
+	def _wait(self, seconds):
+		deadline = time.monotonic() + max(0, seconds)
+		while True:
+			self.token.check()
+			remaining = deadline - time.monotonic()
+			if remaining <= 0:
+				return
+			time.sleep(min(0.1, remaining))
+
 	def fetch(self, url, method="GET", timeout=None, **kwargs):
 		self.token.check()
 		lo, hi = self.delay_range
 		if hi:
-			time.sleep(random.uniform(lo, hi))
+			self._wait(random.uniform(lo, hi))
 		headers = kwargs.pop("headers", None) or self.headers()
+		kwargs.setdefault("max_bytes", self.response_limit)
 		last = None
 		for attempt in range(self.retries):
 			self.token.check()
@@ -238,17 +249,24 @@ class BaseScraper:
 				r = request(method, url, headers=headers,
 				            timeout=timeout or self.timeout,
 				            retries=0, **kwargs)
+				try:
+					self.token.check()
+				except Cancelled:
+					r.close()
+					raise
 				if r.status_code in (429, 503) and attempt < self.retries - 1:
 					last = Exception("HTTP %s" % r.status_code)
+					r.close()
 				else:
 					return r
 			except Cancelled:
 				raise
 			except Exception as e:
 				last = e
-			backoff = (0.4 * (2 ** attempt)) + random.uniform(0, 0.4)
-			self.token.check()
-			time.sleep(backoff)
+			if attempt < self.retries - 1:
+				backoff = (0.4 * (2 ** attempt)) + random.uniform(0, 0.4)
+				self._wait(backoff)
+		self.token.check()
 		log("%s: fetch failed %s (%s)" % (self.name, url, last))
 		return None
 
@@ -284,6 +302,7 @@ class BaseScraper:
 		raise NotImplementedError
 
 	def cached_search(self, query, media_type="movie"):
+		self.token.check()
 		key = "s|%s|%s|%s" % (self.name, media_type, (query or "").lower().strip())
 		hit = cache_get(key)
 		if hit is not None:
@@ -295,10 +314,12 @@ class BaseScraper:
 		except Exception:
 			log("%s: search failed\n%s" % (self.name, format_exc()))
 			res = []
+		self.token.check()
 		cache_set(key, res, self.search_ttl if res else self.empty_ttl)
 		return res
 
 	def cached_sources(self, item):
+		self.token.check()
 		key = "v|%s|%s" % (self.name, self.source_key(item))
 		hit = cache_get(key)
 		if hit is not None:
@@ -310,12 +331,13 @@ class BaseScraper:
 		except Exception:
 			log("%s: get_sources failed\n%s" % (self.name, format_exc()))
 			res = []
+		self.token.check()
 		cache_set(key, res, self.sources_ttl if res else self.empty_ttl)
 		return res
 
 	def source_key(self, item):
 		return "%s|%s|%s" % (item.get("url") or item.get("id") or item.get("title", ""),
-		                     item.get("season") or "", item.get("episode") or "")
+		                     item.get("season") if item.get("season") is not None else "", item.get("episode") or "")
 
 	def make_source(self, url, host=None, label=None, resolver="embed",
 	                language=None, quality_text="", referer=None, **extra):

@@ -2,10 +2,13 @@
 import ast
 import gzip
 import importlib.util
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import re
 import socket
+import threading
+import zlib
 import types
 import unittest
 from unittest.mock import Mock
@@ -103,6 +106,18 @@ class VendoredHttpTests(unittest.TestCase):
                 req = session._opener_verify.open.call_args.args[0]
                 self.assertEqual(req.get_header("Accept-encoding"), "identity")
 
+    def test_decoded_probe_limit_survives_compression_even_when_server_ignores_identity(self):
+        body = b"x" * (1024 * 1024)
+        for encoding, compressed in (("gzip", gzip.compress(body)),
+                                     ("deflate", zlib.compress(body)),
+                                     ("deflate", zlib.compress(body)[2:-4])):
+            with self.subTest(encoding=encoding, size=len(compressed)):
+                raw = RawResponse(compressed, headers={"Content-Encoding": encoding})
+                response = self.session(raw).get(raw.geturl(), max_bytes=256)
+                self.assertEqual(response.content, b"x" * 256)
+                self.assertEqual(raw.reads, [256])
+                self.assertTrue(raw.closed)
+
     def test_zero_byte_probe_closes_without_reading_data(self):
         raw = RawResponse()
         response = self.session(raw).get(raw.geturl(), max_bytes=0)
@@ -133,6 +148,73 @@ class VendoredHttpTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
         self.assertTrue(raw.closed)
         self.assertEqual(raw.reads, [])
+
+
+class RedirectHttpTests(unittest.TestCase):
+    def test_redirect_policy_and_cookies_are_preserved_across_all_openers(self):
+        paths, methods = [], []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_HEAD(self):
+                self.do_GET()
+
+            def do_GET(self):
+                paths.append(self.path)
+                methods.append(self.command)
+                if self.path.startswith("/redirect/"):
+                    self.send_response(int(self.path.rsplit("/", 1)[1]))
+                    self.send_header("Location", "/landing")
+                    self.send_header("Set-Cookie", "session=test; Path=/")
+                    body = b""
+                else:
+                    self.send_response(200)
+                    body = (self.headers.get("Cookie") or "").encode("ascii")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = "http://127.0.0.1:%s" % server.server_port
+        try:
+            for verify in (True, False):
+                for status in (301, 302, 303, 307, 308):
+                    with self.subTest(verify=verify, status=status):
+                        session = http.Session()
+                        paths.clear()
+                        response = session.get(base + "/redirect/%d" % status,
+                                               verify=verify, allow_redirects=False,
+                                               timeout=2, max_bytes=64)
+                        self.assertEqual(response.status_code, status)
+                        self.assertEqual(response.headers["location"], "/landing")
+                        self.assertEqual(paths, ["/redirect/%d" % status])
+                        # A regular request must receive cookies from the no-follow response.
+                        self.assertEqual(session.get(base + "/landing", timeout=2).text,
+                                         "session=test")
+                        paths.clear()
+                        response = session.get(base + "/redirect/%d" % status,
+                                               verify=verify, timeout=2)
+                        self.assertEqual(response.status_code, 200)
+                        self.assertEqual(response.url, base + "/landing")
+                        self.assertEqual(response.text, "session=test")
+                        self.assertEqual(paths, ["/redirect/%d" % status, "/landing"])
+                        paths.clear()
+                        methods.clear()
+                        response = session.head(base + "/redirect/%d" % status,
+                                                verify=verify, timeout=2)
+                        self.assertEqual(response.status_code, 200)
+                        self.assertEqual(paths, ["/redirect/%d" % status, "/landing"])
+                        self.assertEqual(methods, ["HEAD", "HEAD"])
+                        self.assertEqual(response.content, b"")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
 
 class RequestsCapTests(unittest.TestCase):

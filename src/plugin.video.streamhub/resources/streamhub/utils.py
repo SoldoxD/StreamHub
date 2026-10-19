@@ -2,6 +2,7 @@
 import xbmcgui, xbmcaddon, sys, xbmc, os, time, json, xbmcplugin, re
 import base64, random, string, xbmcvfs
 import tempfile
+from threading import Lock
 from datetime import datetime
 from hashlib import md5, sha256, sha1
 from traceback import format_exc
@@ -131,7 +132,8 @@ def request(method, url, retries=1, timeout=6, max_bytes=None, **kwargs):
 		except requests.RequestException:
 			if attempt >= retries:
 				raise
-			monitor.waitForAbort(min(2 ** attempt, 4))
+			if monitor.waitForAbort(min(2 ** attempt, 4)):
+				raise requests.RequestException("Request cancelled during shutdown")
 
 def request_json(method, url, retries=1, timeout=6, **kwargs):
 	response = request(method, url, retries=retries, timeout=timeout, **kwargs)
@@ -376,17 +378,46 @@ def _sweep_due():
 if _sweep_due():
 	clear(auto=True)
 
+_AUTH_LOCK = Lock()
+
+
 def getAuthSignature():
+	"""Share one bounded refresh across concurrent provider workers."""
+	sig = memcache_get("auth", "sig", None)
+	if sig:
+		return sig
+	while not _AUTH_LOCK.acquire(timeout=0.1):
+		if monitor.abortRequested():
+			return None
+	try:
+		if monitor.abortRequested():
+			return None
+		sig = memcache_get("auth", "sig", None)
+		if sig:
+			return sig
+		if memcache_get("auth", "failed", False):
+			return None
+		sig = _fetch_auth_signature()
+		if not sig and not monitor.abortRequested():
+			memcache_set("auth", "failed", True, ttl=30, maxsize=2)
+		return sig
+	finally:
+		_AUTH_LOCK.release()
+
+
+def _fetch_auth_signature():
 	sig = memcache_get("auth", "sig", None)
 	if sig:
 		return sig
 	i = 0
-	while i < 3:
+	while i < 2:
+		if monitor.abortRequested():
+			return None
 		i+=1
 		try:
 			_headers = {'accept':'application/json','content-type':'application/json; charset=utf-8','user-agent':'electron-fetch/1.0 electron (+https://github.com/arantes555/electron-fetch)','Accept-Language':'de'}
 			_data = {"reason":"app-focus","locale":"de","theme":"dark","metadata":{"device":{"type":"Handset","brand":"google","model":"Nexus","name":"21081111RG","uniqueId":"d10e5d99ab665233"},"os":{"name":"android","version":"7.1.2","abis":["arm64-v8a"],"host":"android"},"app":{"platform":"android","version":"1.1.0","buildId":"97215000","engine":"hbc85","signatures":["6e8a975e3cbf07d5de823a760d4c2547f86c1403105020adee5de67ac510999e"],"installer":"com.android.vending"},"version":{"package":"app.lokke.main","binary":"4.1.1","js":"4.1.1"},"platform":{"isAndroid":True,"isIOS":False,"isTV":False,"isWeb":False,"isMobile":True,"isWebTV":False,"isElectron":False}},"appFocusTime":314,"playerActive":False,"playDuration":0,"devMode":True,"hasAddon":True,"castConnected":False,"package":"app.lokke.main","version":"4.1.1","process":"app","firstAppStart":1777415870151,"lastAppStart":1777415870151,"ipLocation":None,"adblockEnabled":False,"proxy":{"supported":["ss","openvpn"],"engine":"openvpn","ssVersion":1,"enabled":False,"autoServer":True,"id":"fi-hel"},"iap":{"supported":True}}
-			req = request_json("POST", 'https://www.lokke.app/api/app/ping', json=_data, headers=_headers, timeout=10, retries=1)
+			req = request_json("POST", 'https://www.lokke.app/api/app/ping', json=_data, headers=_headers, timeout=6, retries=0, max_bytes=128 * 1024)
 			sig = req.get("addonSig") if isinstance(req, dict) else None
 			if sig:
 				memcache_set("auth", "sig", sig, ttl=600, maxsize=2)

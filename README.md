@@ -253,3 +253,67 @@ five upgrade-setting tests. The live updated scraper found Inception and parsed
 its Vinovo/Dood host entries; both redirect pages remained protected, with only
 one request per verification page. Syntax compilation and release ZIP/source,
 version, checksum, and enabled-default checks passed.
+
+
+## Reliability and performance audit 2026.10.19.2
+
+Install `plugin.video.streamhub/plugin.video.streamhub-2026.10.19.2.zip` through
+StreamHub's update check and restart Kodi. Movie2k and Kinox keep their existing
+enabled defaults; no Kinox CAPTCHA handling is added.
+
+This review covered playback setup, background service, resume state, movie and
+series searches/resolvers, provider adapters, HTTP transport, live TV, sports,
+caches and packaging. Changes address verified faults rather than increasing
+buffer sizes indiscriminately:
+
+- **Less background interference:** automatic update checks/downloads/installation
+  and cache-setting writes wait until playback is idle. Playback-state checks
+  between update requests prevent additional work when a stream starts. Explicit
+  manual updates retain their behavior. Resume tracking starts immediately,
+  without waiting for the updater's startup delay.
+- **Resume and seeking:** no sleeping inside the playback callback, no duplicate
+  seek after Kodi already resumed, and a user's startup seek takes precedence.
+  Unchanged paused positions no longer rewrite the resume file every 15 seconds.
+  Backward seeks to zero, early stops, errors, and season-0 specials retain the
+  correct identity/state. A startup playback error ends the legacy waiting loop.
+- **Host selection:** single-source playback uses the same deadline/cancellation
+  path as multiple sources. Available language fallbacks start without waiting
+  for sources that cannot improve the language choice. Gathering and live checks
+  poll Cancel and cancel queued work. Movie/episode host caches include enabled
+  providers, language, year and episode identity.
+- **HTTP and resolver work:** the bundled HTTP client now honors no-follow
+  requests, shares scoped cookies across redirect modes, supports GET/HEAD 308,
+  and preserves HEAD after redirects so status checks do not download media.
+  Metadata reads and decompression are bounded. Packed player decoding has input,
+  loop and expansion limits. Duplicate resolver fallbacks and final-attempt retry
+  sleeps are removed; cancelled scraper results are not cached.
+- **Live TV and sports:** VAVOO's full channel index is reused for ten minutes,
+  previous channels survive index outages, and pagination stops on cycles,
+  shutdown or an expired budget. Concurrent providers share one authentication
+  refresh and briefly cache authentication outages. Bad live mirrors no longer
+  crash fallback; resolver headers reach both probes and playback. LiveTV player
+  type codes remain intact instead of being overwritten with display labels.
+  Manual source selection retains a working Cancel dialog.
+- **Legacy startup limits:** Vavoo relay resolution stops after six continuation
+  hops or its time budget; DLHD folder fallbacks share one startup budget instead
+  of multiplying retries across six folders. Both retain normal successful
+  responses/headers and cap metadata bodies.
+- **Provider correctness:** Ramoflix error/protection pages no longer exclude a
+  movie through the long-lived type cache. Vavoo/67movies requests and scraper
+  cache identities preserve season zero.
+
+Validation uses fake Kodi APIs, synthetic provider responses, deterministic
+worker/cancellation fixtures, and a real local HTTP server. No Fire TV playback
+or bandwidth/decoder benchmark was performed. A network request already running
+may finish at its socket timeout; cancellation prevents queued and subsequent
+work. Slow hosts, Wi-Fi throughput, unsupported codecs and CAPTCHA-protected
+links remain external limitations, so this release cannot guarantee uninterrupted
+playback on every source.
+
+Kodi callback reference: [official Player callbacks](https://xbmc.github.io/docs.kodi.tv/master/kodi-base/dd/d41/group__python___player_c_b.html).
+
+Release validation: **298 tests passed** (83 added regressions), Python 3.9 syntax
+compilation passed, and independent cross-review covered the changed transport,
+service, playback, provider and live-selection paths. The suite includes a local
+HTTP server proving redirected HEAD remains HEAD, no-follow requests retain
+cookies, and bounded compressed responses stay within their decoded size limit.

@@ -28,7 +28,7 @@ class Movies67Scraper(BaseScraper):
 		episode = item.get("episode")
 		out = []
 		for name, movie_tpl, tv_tpl in _EMBEDS:
-			if season and episode:
+			if season not in (None, "") and episode:
 				url = tv_tpl % (tmdb, season, episode)
 			else:
 				url = movie_tpl % tmdb
@@ -40,5 +40,5 @@ class Movies67Scraper(BaseScraper):
 		return out
 
 	def source_key(self, item):
-		return "%s|%s|%s" % (item.get("tmdb_id"), item.get("season") or "",
+		return "%s|%s|%s" % (item.get("tmdb_id"), item.get("season") if item.get("season") is not None else "",
 		                     item.get("episode") or "")

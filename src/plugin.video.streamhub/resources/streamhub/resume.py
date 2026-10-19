@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+import tempfile
 
 from streamhub.utils import translatePath, log, home, format_exc, getSetting
 
@@ -27,15 +28,19 @@ def _norm(s):
 
 def key_for(item):
 	tmdb = str(item.get("tmdb_id") or "").strip()
-	s = item.get("season") or item.get("_s")
-	e = item.get("episode") or item.get("_e")
+	s = item.get("season")
+	if s in (None, ""):
+		s = item.get("_s")
+	e = item.get("episode")
+	if e in (None, ""):
+		e = item.get("_e")
 	if tmdb and tmdb.lower() != "none":
 		base = "t" + tmdb
 	else:
 		base = "n" + _norm(item.get("title") or item.get("name") or "")
 	if not base or base in ("t", "n"):
 		return ""
-	if s and e:
+	if s not in (None, "") and e not in (None, "", 0, "0"):
 		base += ":s%se%s" % (s, e)
 	return base
 
@@ -55,12 +60,15 @@ def _save(store):
 			old = sorted(store, key=lambda k: store[k].get("ts", 0))
 			for k in old[:len(store) - _MAX]:
 				store.pop(k, None)
-		if not os.path.isdir(_DIR):
-			os.makedirs(_DIR)
-		tmp = _FILE + ".tmp"
-		with open(tmp, "w", encoding="utf-8") as f:
-			json.dump(store, f)
-		os.replace(tmp, _FILE)
+		os.makedirs(_DIR, exist_ok=True)
+		fd, tmp = tempfile.mkstemp(prefix=".resume-", suffix=".tmp", dir=_DIR)
+		try:
+			with os.fdopen(fd, "w", encoding="utf-8") as f:
+				json.dump(store, f)
+			os.replace(tmp, _FILE)
+		finally:
+			if os.path.exists(tmp):
+				os.remove(tmp)
 	except Exception:
 		log("resume save failed\n%s" % format_exc())
 
@@ -72,11 +80,17 @@ def get(key):
 
 
 def resume_seconds(key):
-	ent = get(key)
+	return _resume_seconds(get(key))
+
+
+def _resume_seconds(ent):
 	if not ent or ent.get("watched"):
 		return 0
-	pos = int(ent.get("pos") or 0)
-	return pos if pos >= _MIN_RESUME else 0
+	try:
+		pos = int(ent.get("pos") or 0)
+		return pos if pos >= _MIN_RESUME else 0
+	except (TypeError, ValueError):
+		return 0
 
 
 def is_watched(key):
@@ -229,6 +243,9 @@ def next_up(tmdb_id, title=None):
 
 
 def announce_playing(item):
+	if not enabled():
+		home.clearProperty(_PROP)
+		return
 	try:
 		key = key_for(item)
 		if not key:
@@ -249,7 +266,7 @@ def apply_resume(o, item):
 		ent = get(key_for(item))
 		if not ent:
 			return
-		pos = resume_seconds(key_for(item))
+		pos = _resume_seconds(ent)
 		total = int(ent.get("total") or 0)
 		if pos and total:
 			o.setProperty("ResumeTime", str(pos))
@@ -274,7 +291,7 @@ def decorate(o, item, infos=None):
 				infos = dict(infos)
 				infos["playcount"] = 1
 		else:
-			pos = resume_seconds(key)
+			pos = _resume_seconds(ent)
 			if pos and total:
 				o.setProperty("ResumeTime", str(pos))
 				o.setProperty("TotalTime", str(total))

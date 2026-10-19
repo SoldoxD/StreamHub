@@ -60,12 +60,12 @@ class VavooScraper(BaseScraper):
 		episode = item.get("episode")
 		data = {
 			"language": "de", "region": "AT",
-			"type": "series" if season else "movie",
+			"type": "series" if season not in (None, "") else "movie",
 			"ids": {"tmdb_id": tmdb},
 			"name": item.get("title", ""),
 			"clientVersion": "3.0.2",
 		}
-		if season and episode:
+		if season not in (None, "") and episode:
 			data["episode"] = {"season": str(season), "episode": str(episode)}
 		headers = {
 			"user-agent": "MediaHubMX/2",
@@ -99,5 +99,5 @@ class VavooScraper(BaseScraper):
 		return out
 
 	def source_key(self, item):
-		return "%s|%s|%s" % (item.get("tmdb_id"), item.get("season") or "",
+		return "%s|%s|%s" % (item.get("tmdb_id"), item.get("season") if item.get("season") is not None else "",
 		                     item.get("episode") or "")

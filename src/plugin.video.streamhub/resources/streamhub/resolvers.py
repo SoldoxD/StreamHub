@@ -461,22 +461,40 @@ def _b62(n, base):
 
 
 def unpack(js):
+	# Bound the native path too: a web page supplies these loop counts and
+	# replacement words, so malformed player scripts must not stall Fire TV.
+	if not isinstance(js, str) or len(js) > 262144:
+		return ""
 	out = []
-	for a in _PACKED_ARGS_RE.finditer(js or ""):
+	for index, a in enumerate(_PACKED_ARGS_RE.finditer(js)):
+		if index >= 4:
+			return ""
 		try:
 			payload = a.group(1)
+			if len(a.group(2)) > 2 or len(a.group(3)) > 4:
+				return ""
 			base, count = int(a.group(2)), int(a.group(3))
+			if not 2 <= base <= 62 or not 0 <= count <= 2048:
+				return ""
 			words = a.group(4).split("|")
 		except Exception:
 			continue
 		payload = (payload.replace("\\\\", "\\").replace("\\'", "'")
 		           .replace('\\"', '"').replace("\\/", "/"))
 		res = payload
-		for i in range(count - 1, -1, -1):
-			if i < len(words) and words[i]:
-				res = re.sub(r"\b" + re.escape(_b62(i, base)) + r"\b",
-				             words[i].replace("\\", "\\\\"), res)
+		for i in range(min(count, len(words)) - 1, -1, -1):
+			if words[i]:
+				token = _b62(i, base)
+				pattern = re.compile(r"\b" + re.escape(token) + r"\b")
+				growth = len(words[i]) - len(token)
+				if growth > 0:
+					occurrences = sum(1 for _ in pattern.finditer(res))
+					if len(res) + growth * occurrences > 1024 * 1024:
+						return ""
+				res = pattern.sub(lambda match: words[i], res)
 		out.append(res)
+		if sum(len(part) for part in out) > 1024 * 1024:
+			return ""
 	return "\n".join(out)
 
 
@@ -492,7 +510,7 @@ def _eval_concat(expr):
 
 def resolve_streamtape(url):
 	try:
-		r = request("GET", url, headers=_hdr(url), timeout=8, retries=1)
+		r = request("GET", url, headers=_hdr(url), timeout=8, retries=1, max_bytes=1024 * 1024)
 		if r.status_code >= 400:
 			return None
 		m = _NOROBOT_RE.search(r.text)
@@ -518,7 +536,7 @@ def resolve_mixdrop(url):
 	try:
 		if "/f/" in url:
 			url = url.replace("/f/", "/e/")
-		r = request("GET", url, headers=_hdr(url), timeout=8, retries=1)
+		r = request("GET", url, headers=_hdr(url), timeout=8, retries=1, max_bytes=1024 * 1024)
 		if r.status_code >= 400:
 			return None
 		body = r.text
@@ -535,9 +553,9 @@ def resolve_mixdrop(url):
 
 
 def resolve_packed(url, referer=None):
-	for ref in (None, referer):
+	for ref in dict.fromkeys((None, referer)):
 		try:
-			r = request("GET", url, headers=_hdr(ref), timeout=8, retries=1)
+			r = request("GET", url, headers=_hdr(ref), timeout=8, retries=1, max_bytes=1024 * 1024)
 			if r.status_code >= 400:
 				continue
 			origin = "https://%s" % urlparse(r.url).netloc
@@ -579,7 +597,7 @@ def resolve_vidara(url):
 		h["X-Requested-With"] = "XMLHttpRequest"
 		r = request("POST", origin + "/api/stream", headers=h,
 		             json={"filecode": fc, "device": "web"},
-		             timeout=12, retries=1)
+		             timeout=12, retries=1, max_bytes=1024 * 1024)
 		if r.status_code >= 400:
 			return None
 		data = r.json()
@@ -611,7 +629,7 @@ def resolve_firestream(url):
 		h["Content-Type"] = "application/json"
 		pr = request("POST", "%s/api/videos/%s/resolve" % (origin, quote(slug)),
 		              headers=h, json={"blob": m.group(1).strip()},
-		              timeout=12, retries=1)
+		              timeout=12, retries=1, max_bytes=1024 * 1024)
 		if pr.status_code >= 400:
 			return None
 		src = (pr.json() or {}).get("signedVideoUrl")
@@ -678,10 +696,10 @@ def resolve_filemoon(url):
 		h = _hdr(url)
 		h["Accept"] = "application/json, text/plain, */*"
 		data = None
-		for base in (origin, "https://filemoon.to", "https://filemoon.sx"):
+		for base in dict.fromkeys((origin, "https://filemoon.to", "https://filemoon.sx")):
 			r = request("GET", "%s/api/videos/%s" % (base, code),
 			            headers=_hdr(base + "/", Accept="application/json"),
-			            timeout=10, retries=1)
+			            timeout=10, retries=1, max_bytes=1024 * 1024)
 			if r.status_code == 200:
 				try:
 					j = r.json()

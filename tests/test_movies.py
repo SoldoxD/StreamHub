@@ -265,7 +265,7 @@ class MovieTests(unittest.TestCase):
 
     def test_no_bandwidth_probe_after_another_host_wins(self):
         stop = threading.Event()
-        def resolve(host):
+        def resolve(host, stop=None):
             stop.set()
             return 'https://cdn.invalid/video.mp4', None
         self.movies._resolve_host = Mock(side_effect=resolve)
@@ -284,6 +284,95 @@ class MovieTests(unittest.TestCase):
         self.movies._resolve_host = Mock(return_value=None)
         self.assertEqual(self.movies._race_hosts([{}, {}], deadline_s=-1), (None, None))
         self.assertLessEqual(self.movies._resolve_host.call_count, 2)
+
+
+    def test_single_slow_host_obeys_race_deadline(self):
+        release = threading.Event()
+        self.movies._resolve_host = Mock(side_effect=lambda *a, **kw: release.wait(2) and None)
+        started = time.monotonic()
+        try:
+            self.assertEqual(self.movies._race_hosts([{}], deadline_s=0.03), (None, None))
+            self.assertLess(time.monotonic() - started, 0.4)
+        finally:
+            release.set()
+
+    def test_ready_unknown_language_host_does_not_wait_for_other_unknown_hosts(self):
+        release = threading.Event()
+        fast, slow = {'url': 'fast'}, {'url': 'slow'}
+        def resolve(host, **kwargs):
+            if host is slow:
+                release.wait(2)
+                return None
+            return ('https://cdn.invalid/video.mp4', None)
+        self.movies._resolve_host = Mock(side_effect=resolve)
+        started = time.monotonic()
+        try:
+            chosen, stream = self.movies._race_hosts([fast, slow], deadline_s=1)
+            self.assertIs(chosen, fast)
+            self.assertIsNotNone(stream)
+            self.assertLess(time.monotonic() - started, 0.4)
+        finally:
+            release.set()
+
+    def test_slow_preferred_language_still_beats_ready_fallback(self):
+        fallback, preferred = {'lang': 'EN'}, {'lang': 'DE'}
+        def resolve(host, **kwargs):
+            if host is preferred:
+                time.sleep(0.03)
+            return ('https://cdn.invalid/video.mp4', None)
+        self.movies._resolve_host = Mock(side_effect=resolve)
+        self.assertIs(self.movies._race_hosts([fallback, preferred], deadline_s=1)[0], preferred)
+
+    def test_cancelled_single_host_does_not_start_resolver(self):
+        self.movies._resolve_host = Mock()
+        self.movies._TOKEN = types.SimpleNamespace(cancelled=lambda: True, cancel=Mock())
+        self.assertEqual(self.movies._race_hosts([{}]), (None, None))
+        self.movies._resolve_host.assert_not_called()
+
+    def test_cancelled_gather_returns_without_waiting_for_provider(self):
+        release, cancelled = threading.Event(), threading.Event()
+        def get_hosts(hit):
+            cancelled.set()
+            release.wait(2)
+            return []
+        provider = types.SimpleNamespace(name='slow', get_hosts=get_hosts)
+        self.movies._TOKEN = types.SimpleNamespace(cancelled=cancelled.is_set)
+        self.movies._enabled_providers = Mock(return_value=[provider])
+        started = time.monotonic()
+        try:
+            self.assertEqual(self.movies._gather_hosts({'hits': [{'provider': 'slow'}]}), [])
+            self.assertLess(time.monotonic() - started, 0.4)
+        finally:
+            release.set()
+
+    def test_movie_cache_identity_includes_enabled_sources_year_and_language(self):
+        self.movies.StatusProgress = Mock()
+        self.movies.get_cache = Mock(return_value=(True, [{'url': 'cached'}]))
+        self.movies.choose_and_play = Mock()
+        provider = types.SimpleNamespace(name='movie2k')
+        self.movies._enabled_providers = Mock(return_value=[provider])
+        movie = {'title': 'Remake', 'year': 2001}
+        self.movies._play_common(movie, movie, 'Remake')
+        key = self.movies.get_cache.call_args.args[0]
+        self.assertEqual(key['providers'], ['movie2k'])
+        self.assertEqual(key['year'], '2001')
+        self.assertEqual(key['lang'], 'DE')
+        self.movies._enabled_providers.return_value = []
+        self.movies._play_common(dict(movie, year=2026), movie, 'Remake')
+        self.assertNotEqual(key, self.movies.get_cache.call_args.args[0])
+
+    def test_abandoned_native_resolution_skips_fallback_network_requests(self):
+        stop = threading.Event()
+        def native_resolve(*args, **kwargs):
+            stop.set()
+        native = types.SimpleNamespace(resolve=Mock(side_effect=native_resolve),
+            is_blocked=lambda url: False, get_resolve_failure=lambda url: None)
+        self.movies._resolve_external = Mock()
+        generic = types.SimpleNamespace(resolve_public_embed=Mock())
+        with patch.dict(sys.modules, {'streamhub.resolvers': native, 'streamhub.host_support': generic}):
+            self.assertIsNone(self.movies._resolve_embed({'url': 'https://host.invalid/a'}, stop=stop))
+        self.movies._resolve_external.assert_not_called()
+        generic.resolve_public_embed.assert_not_called()
 
 
 if __name__ == '__main__':

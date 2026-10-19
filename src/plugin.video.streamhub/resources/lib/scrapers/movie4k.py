@@ -240,5 +240,5 @@ class Movie4kScraper(BaseScraper):
 
 	def source_key(self, item):
 		return "%s|%s|%s|%s" % (item.get("id") or item.get("base") or "",
-		                        item.get("season") or "", item.get("episode") or "",
+		                        item.get("season") if item.get("season") is not None else "", item.get("episode") or "",
 		                        self.lang_code())

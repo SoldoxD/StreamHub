@@ -441,23 +441,53 @@ def cachedcall(action, params, timeout=24):
 		set_cache(params, content, timeout=timeout)
 		return content
 
-def callApi(action, params, method="GET", headers=None, **kwargs):
+def callApi(action, params, method="GET", headers=None, timeout=10, retries=1, **kwargs):
 	log(params, header="Action:%s params:" % action)
 	if not headers: headers = dict()
 	headers["auth-token"] = getAuthSignature()
-	resp = request(method, (BASEURL + action), params=params, headers=headers, retries=1, timeout=10, **kwargs)
+	resp = request(method, (BASEURL + action), params=params, headers=headers, retries=retries, timeout=timeout, **kwargs)
 	resp.raise_for_status()
 	data = resp.json()
 	log(data, header="callApi res:")
 	return data
 
+_RELAY_MAX_HOPS = 6
+_RELAY_BUDGET = 20.0
+_RELAY_BODY_LIMIT = 1024 * 1024
+
+
+def _relay_remaining(deadline):
+	if monitor.abortRequested():
+		return 0
+	# Movie/series playback supplies a token; catalog-only callers may not.
+	try:
+		from streamhub.movies import _cancelled
+		if _cancelled():
+			return 0
+	except ImportError:
+		pass
+	return max(0, deadline - time.monotonic())
+
+
 def callApi2(action, params):
-	res = callApi(action, params, verify=False)
-	while True:
+	deadline = time.monotonic() + _RELAY_BUDGET
+	remaining = _relay_remaining(deadline)
+	if not remaining:
+		return None
+	res = callApi(action, params, verify=False, retries=0,
+	              timeout=min(8, remaining), max_bytes=2 * _RELAY_BODY_LIMIT)
+	for hop in range(_RELAY_MAX_HOPS + 1):
+		remaining = _relay_remaining(deadline)
+		if not remaining:
+			log("Vavoo relay: deadline reached or cancelled")
+			return None
 		if type(res) is not dict or "id" not in res or "data" not in res:
 			return res
 		data = res["data"]
 		if type(data) is dict and data.get("type") == "fetch":
+			if hop >= _RELAY_MAX_HOPS:
+				log("Vavoo relay: fetch limit reached")
+				return None
 			fetch_params = data.get("params", {})
 			body = fetch_params.get("body")
 			headers = fetch_params.get("headers")
@@ -468,19 +498,28 @@ def callApi2(action, params):
 					data["url"],
 					headers={k: v[0] if type(v) in (list, tuple) else v for k, v in headers.items()} if headers else None,
 					data=decoded_body,
-					max_bytes=None if body else 0,
+					max_bytes=_RELAY_BODY_LIMIT if body else 0,
 					allow_redirects=fetch_params.get("redirect", "follow") == "follow",
-					timeout=10,
-					retries=1
+					timeout=min(8, remaining),
+					retries=0
 				)
 			except Exception:
 				log(format_exc())
-				return
-			headers = dict(resp.headers)
-			resData = {"status": resp.status_code, "url": resp.url, "headers": headers, "data": base64.b64encode(resp.content).decode("utf-8").replace("\n", "") if body else None}
-			log(resData)
-			res = callApi("res", {"id": res["id"]}, method="POST", json=resData, verify=False)
+				return None
+			remaining = _relay_remaining(deadline)
+			if not remaining:
+				resp.close()
+				return None
+			try:
+				headers = dict(resp.headers)
+				resData = {"status": resp.status_code, "url": resp.url, "headers": headers, "data": base64.b64encode(resp.content).decode("utf-8").replace("\n", "") if body else None}
+			finally:
+				resp.close()
+			log("Vavoo relay: fetch completed with HTTP %s" % resData["status"])
+			res = callApi("res", {"id": res["id"]}, method="POST", json=resData, verify=False,
+			              retries=0, timeout=min(8, remaining), max_bytes=2 * _RELAY_BODY_LIMIT)
 		elif type(data) is dict and data.get("error"):
 			log(data.get("error"))
-			return
-		else: return data
+			return None
+		else:
+			return data

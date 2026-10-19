@@ -4,6 +4,8 @@ from streamhub.utils import *
 BASE = "https://dlhd.pk"
 CHANNELS_PAGE = BASE + "/24-7-channels.php"
 STREAM_FOLDERS = ("stream", "cast", "watch", "plus", "casting", "player")
+_RESOLVE_BUDGET = 15.0
+_PLAYER_PAGE_LIMIT = 1024 * 1024
 DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
@@ -72,9 +74,21 @@ def get_channels():
 	return out
 
 
-def _extract_iframe_src(stream_url):
+def _startup_timeout(deadline):
+	if monitor.abortRequested():
+		raise RuntimeError("DLHD: resolution cancelled")
+	remaining = deadline - time.monotonic()
+	if remaining <= 0:
+		raise RuntimeError("DLHD: resolution deadline reached")
+	return min(6, remaining)
+
+
+def _extract_iframe_src(stream_url, deadline=None):
+	if deadline is None:
+		deadline = time.monotonic() + _RESOLVE_BUDGET
 	resp = request("GET", stream_url, headers=_ua_headers(BASE + "/"),
-	               timeout=15, retries=1)
+	               timeout=_startup_timeout(deadline), retries=0, max_bytes=_PLAYER_PAGE_LIMIT)
+	_startup_timeout(deadline)
 	resp.raise_for_status()
 	html = resp.text
 	m = _IFRAME_RE.search(html) or _IFRAME_FALLBACK_RE.search(html)
@@ -88,9 +102,12 @@ def _extract_iframe_src(stream_url):
 	return src
 
 
-def _extract_m3u8_from_iframe(iframe_url, ref):
+def _extract_m3u8_from_iframe(iframe_url, ref, deadline=None):
+	if deadline is None:
+		deadline = time.monotonic() + _RESOLVE_BUDGET
 	resp = request("GET", iframe_url, headers=_ua_headers(ref),
-	               timeout=15, retries=1)
+	               timeout=_startup_timeout(deadline), retries=0, max_bytes=_PLAYER_PAGE_LIMIT)
+	_startup_timeout(deadline)
 	resp.raise_for_status()
 	html = resp.text
 	for blob in _ATOB_RE.findall(html):
@@ -108,11 +125,15 @@ def resolve_stream(channel_id):
 	if cid.startswith("dlhd://"):
 		cid = cid[len("dlhd://"):]
 	last_err = None
+	deadline = time.monotonic() + _RESOLVE_BUDGET
 	for folder in STREAM_FOLDERS:
+		if monitor.abortRequested() or time.monotonic() >= deadline:
+			last_err = "resolution cancelled or deadline reached"
+			break
 		stream_url = "%s/%s/stream-%s.php" % (BASE, folder, cid)
 		try:
-			iframe = _extract_iframe_src(stream_url)
-			m3u8 = _extract_m3u8_from_iframe(iframe, stream_url)
+			iframe = _extract_iframe_src(stream_url, deadline=deadline)
+			m3u8 = _extract_m3u8_from_iframe(iframe, stream_url, deadline=deadline)
 
 			parsed = urlparse(iframe)
 			origin = "%s://%s" % (parsed.scheme, parsed.netloc)
@@ -309,8 +330,9 @@ def fetch_soccer_events():
 
 def _resolve_via_dlhd_wrapper(wrapper_url, ref):
 	try:
-		iframe = _extract_iframe_src(wrapper_url)
-		return _extract_m3u8_from_iframe(iframe, wrapper_url), iframe
+		deadline = time.monotonic() + _RESOLVE_BUDGET
+		iframe = _extract_iframe_src(wrapper_url, deadline=deadline)
+		return _extract_m3u8_from_iframe(iframe, wrapper_url, deadline=deadline), iframe
 	except Exception as e:
 		log("DLHD wrapper resolve failed: %s" % e)
 		return None, None

@@ -1350,7 +1350,7 @@ def _gather_hosts(movie, manual_dialog=False):
 	ex = ThreadPoolExecutor(max_workers=max(len(tasks), 1))
 	futs = {ex.submit(p.get_hosts, hit): p.name for p, hit in tasks}
 	try:
-		for fut in as_completed(futs, timeout=_GATHER_DEADLINE):
+		for fut in _completed(futs, _GATHER_DEADLINE):
 			if _cancelled():
 				break
 			try:
@@ -1402,7 +1402,10 @@ def _play_common(movie, host_source, heading_title):
 		          p.name for p in _enabled_providers()))
 
 	cache_key = {"_movie_hosts": movie.get("tmdb_id") or movie.get("title", ""),
-	             "s": movie.get("_s"), "e": movie.get("_e")}
+	             "s": movie.get("_s"), "e": movie.get("_e"),
+	             "year": str(movie.get("year") or ""),
+	             "lang": pref_lang(),
+	             "providers": sorted(p.name for p in _enabled_providers())}
 	cacheOk, cached_hosts = get_cache(cache_key)
 	if cacheOk and isinstance(cached_hosts, list) and cached_hosts:
 		all_hosts = cached_hosts
@@ -1612,7 +1615,7 @@ def _resolve_and_verify(host, stop=None):
 	if _cancelled() or (stop is not None and stop.is_set()):
 		host["_alive"] = None
 		return host, None
-	stream = _resolve_host(host)
+	stream = _resolve_host(host, stop=stop)
 	if not stream:
 		host["_alive"] = None
 		return host, None
@@ -1622,10 +1625,29 @@ def _resolve_and_verify(host, stop=None):
 	host["_resolved_at"] = time.monotonic()
 	url, hdr = stream
 	verdict = _verify_stream(url, hdr, host)
+	if _cancelled() or (stop is not None and stop.is_set()):
+		return host, None
 	host["_alive"] = verdict
 	if verdict is False:
 		return host, None
 	return host, stream
+
+
+
+def _completed(futures, deadline_s):
+	"""Yield completed work while checking cancellation between short waits."""
+	pending = set(futures)
+	deadline = time.monotonic() + deadline_s
+	while pending and not _cancelled():
+		remaining = deadline - time.monotonic()
+		if remaining <= 0:
+			return
+		finished, pending = wait(pending, timeout=min(0.1, remaining),
+		                         return_when=FIRST_COMPLETED)
+		for future in finished:
+			if _cancelled():
+				return
+			yield future
 
 
 def _abandon(ex, futs):
@@ -1652,19 +1674,19 @@ def _resolve_verify_bulk(hosts, deadline_s=10.0, prog=None, enough=_ENOUGH_VERIF
 	futs = {ex.submit(_resolve_and_verify, h, stop): h for h in hosts}
 	pending = set(futs)
 	cancelled = False
-	deadline = time.time() + deadline_s
+	deadline = time.monotonic() + deadline_s
 	while pending:
 		if (prog and prog.iscanceled()) or _cancelled():
 			cancelled = True
 			break
-		if time.time() > deadline:
+		if time.monotonic() >= deadline:
 			break
 		if enough and sum(1 for w, _ in working
 		                  if w.get("_alive") is True) >= enough:
 			log("verify: %d confirmed hosts, skipping the remaining %d"
 			    % (enough, len(pending)))
 			break
-		finished, pending = wait(pending, timeout=0.2,
+		finished, pending = wait(pending, timeout=min(0.1, max(0, deadline - time.monotonic())),
 		                         return_when=FIRST_COMPLETED)
 		for fut in finished:
 			done += 1
@@ -1723,18 +1745,7 @@ def _race_hosts(hosts, deadline_s=8.0, verify=False, prog=None):
 	def worker(h):
 		if stop.is_set() or _cancelled():
 			return h, None
-		return _resolve_and_verify(h, stop) if verify else (h, _resolve_host(h))
-	if len(hosts) == 1:
-		if prog:
-			prog.step(60, "Löse Hoster auf …",
-			          "%s  [COLOR %s]%s[/COLOR]" % (
-				          hosts[0].get("host", "?"),
-				          _PROV_COLOUR.get(hosts[0].get("provider"), "grey"),
-				          hosts[0].get("provider", "")))
-		h, stream = worker(hosts[0])
-		if stream:
-			return h, stream
-		return None, None
+		return _resolve_and_verify(h, stop) if verify else (h, _resolve_host(h, stop=stop))
 	best = None
 	total = len(hosts)
 	done = 0
@@ -1743,14 +1754,18 @@ def _race_hosts(hosts, deadline_s=8.0, verify=False, prog=None):
 	pending = set(futs)
 	winner = None
 	cancelled = False
-	deadline = time.time() + deadline_s
+	deadline = time.monotonic() + deadline_s
 	while pending and winner is None:
 		if (prog and prog.iscanceled()) or _cancelled():
 			cancelled = True
 			break
-		if time.time() > deadline:
+		if time.monotonic() >= deadline:
 			break
-		finished, pending = wait(pending, timeout=0.2,
+		# Once only equally non-preferred languages remain, waiting cannot
+		# improve the language choice. Start the resolved fallback promptly.
+		if best is not None and not any(_lang_rank(futs[f]) < _lang_rank(best[0]) for f in pending):
+			break
+		finished, pending = wait(pending, timeout=min(0.1, max(0, deadline - time.monotonic())),
 		                         return_when=FIRST_COMPLETED)
 		for fut in finished:
 			done += 1
@@ -1787,7 +1802,9 @@ def _race_hosts(hosts, deadline_s=8.0, verify=False, prog=None):
 	return None, None
 
 
-def _resolve_host(host):
+def _resolve_host(host, stop=None):
+	if _cancelled() or (stop is not None and stop.is_set()):
+		return None
 	resolver = host.get("resolver")
 	try:
 		if resolver == "vavoo_chain":
@@ -1808,7 +1825,7 @@ def _resolve_host(host):
 				return None
 			ref = host.get("referer") or url
 			return url, "Referer=%s&User-Agent=%s" % (quote(ref, safe=""), quote(UA, safe=""))
-		return _resolve_embed(host)
+		return _resolve_embed(host, stop=stop)
 	except Exception:
 		log(format_exc())
 	return None
@@ -1841,7 +1858,7 @@ def _resolve_external(url, referer=None):
 	return None
 
 
-def _resolve_embed(host):
+def _resolve_embed(host, stop=None):
 	url = host.get("url", "")
 	ref = host.get("referer") or url
 	try:
@@ -1855,9 +1872,13 @@ def _resolve_embed(host):
 			return None
 	except Exception:
 		log(format_exc())
+	if _cancelled() or (stop is not None and stop.is_set()):
+		return None
 	res = _resolve_external(url, ref)
 	if res:
 		return res
+	if _cancelled() or (stop is not None and stop.is_set()):
+		return None
 	try:
 		from streamhub.host_support import resolve_public_embed
 		return resolve_public_embed(url, ref)

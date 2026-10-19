@@ -272,12 +272,27 @@ def _set_last_check_ts(ts):
 		pass
 
 
+def _playback_active():
+	try:
+		return xbmc.Player().isPlaying()
+	except Exception:
+		# Automatic maintenance can wait if player state is unavailable.
+		return True
+
+
 def check_for_update(force=False):
+	# A manual update keeps its existing explicit behavior. Automatic work waits
+	# for idle, including when playback begins during the manifest request.
+	if not force and _playback_active():
+		return None
 	installed = _installed_version()
 
 	# cheap change-detector: skip parsing the manifest if the md5 is unchanged
+	md5 = ""
 	if not force:
 		md5 = _remote_md5()
+		if _playback_active():
+			return None
 		st = _load_state()
 		if md5 and md5 == st.get("md5") and st.get("known") \
 				and not _is_newer(st.get("known"), installed):
@@ -285,12 +300,15 @@ def check_for_update(force=False):
 			return False
 
 	remote = _fetch_remote_version()
+	if not force and _playback_active():
+		return None
 	_log("installed=%s  remote=%s" % (installed, remote))
 	if not remote:
 		return False
 	try:
 		st = _load_state()
-		st["md5"] = _remote_md5() or st.get("md5", "")
+		# Reuse the checksum already fetched by an automatic check.
+		st["md5"] = (_remote_md5() if force else md5) or st.get("md5", "")
 		st["known"] = remote
 		_save_state(st)
 	except Exception:
@@ -299,6 +317,8 @@ def check_for_update(force=False):
 		_log("already up to date")
 		return False
 
+	if not force and _playback_active():
+		return None
 	auto = _setting("auto_update") == "true"
 	if not auto and not force:
 		ok = xbmcgui.Dialog().yesno(
@@ -311,12 +331,16 @@ def check_for_update(force=False):
 		if not ok:
 			return False
 
+	if not force and _playback_active():
+		return None
 	xbmcgui.Dialog().notification("StreamHub", "Update %s wird geladen..." % remote, time=4000)
 	zip_bytes = _download_zip(remote)
 	if not zip_bytes:
 		xbmcgui.Dialog().notification("StreamHub", "Download fehlgeschlagen", time=6000)
 		return False
 
+	if not force and _playback_active():
+		return None
 	ok, reason = _install_zip(zip_bytes, remote)
 	if not ok:
 		xbmcgui.Dialog().notification(
@@ -400,6 +424,13 @@ class ResumeTracker(xbmc.Player):
 		self._total = 0
 		self._seeked = False
 		self._last_flush = 0
+		self._last_saved = None
+		self._pending_resume = 0
+		self._av_started = False
+		self._sampled = False
+		self._seek_after = 0
+		self._seek_deadline = 0
+		self._seek_requested = False
 
 	def _pickup(self):
 		try:
@@ -409,9 +440,13 @@ class ResumeTracker(xbmc.Player):
 			if not raw:
 				return
 			d = json.loads(raw)
+			if not isinstance(d, dict) or not d.get("key"):
+				home.clearProperty(self.PROP)
+				return
+			self._reset()
 			self._key = d.get("key") or None
 			self._title = d.get("title", "")
-			self._pending_resume = int(d.get("resume") or 0)
+			self._pending_resume = max(0, int(d.get("resume") or 0))
 			self._seeked = False
 			home.clearProperty(self.PROP)
 		except Exception:
@@ -419,54 +454,88 @@ class ResumeTracker(xbmc.Player):
 
 	def onAVStarted(self):
 		self._pickup()
-		self._maybe_seek()
+		self._av_started = True
+		# Kodi may already apply the ListItem resume point. Give it one service
+		# tick, then check the actual position before issuing a fallback seek.
+		now = time.monotonic()
+		self._seek_after = now + 1
+		self._seek_deadline = now + 10
 
 	def onPlayBackStarted(self):
 		if not self._key:
 			self._pickup()
 
+	def onPlayBackSeek(self, time, seekOffset):
+		if not self._key:
+			return
+		# A user/native seek during startup takes precedence over our fallback.
+		# Keep waiting only for acknowledgement of our own requested resume.
+		try:
+			own_seek = self._seek_requested and abs(float(time) / 1000 - self._pending_resume) <= 5
+		except (TypeError, ValueError):
+			own_seek = False
+		if not own_seek:
+			self._seeked = True
+
 	def _maybe_seek(self):
-		if self._seeked or not self._key:
+		if self._seeked or not self._key or not self._av_started:
+			return
+		pos = self._pending_resume
+		if pos < 30:
+			self._seeked = True
+			return
+		now = time.monotonic()
+		if now < self._seek_after:
 			return
 		try:
-			pos = getattr(self, "_pending_resume", 0)
-			if pos and pos >= 30:
-				# wait until the stream reports a duration, then seek
-				for _ in range(20):
-					if self.isPlaying() and (self.getTotalTime() or 0) > pos:
-						self.seekTime(pos)
-						break
-					xbmc.sleep(250)
-			self._seeked = True
+			if not self.isPlaying():
+				return
+			# Avoid a second seek (and buffer discard) after Kodi resumed itself.
+			if self.getTime() >= pos - 5:
+				self._seeked = True
+			elif now >= self._seek_deadline:
+				self._seeked = True
+			elif not self._seek_requested and (self.getTotalTime() or 0) > pos:
+				self._seek_requested = True
+				self.seekTime(pos)
 		except Exception:
-			pass
+			if now >= self._seek_deadline:
+				self._seeked = True
 
 	def sample(self):
 		if not self._key:
 			return
 		try:
-			if not self.isPlaying():
+			if not self.isPlaying() or not self._av_started:
+				return
+			self._maybe_seek()
+			if not self._seeked:
 				return
 			t = self.getTime()
-			if t and t >= 0:
+			if t is not None and t >= 0:
 				self._pos = int(t)
+				self._sampled = True
 			tot = self.getTotalTime()
 			if tot and tot > 0:
 				self._total = int(tot)
 			# periodic flush so a crash / hard stop never loses the position
-			now = time.time()
-			if self._pos >= 30 and (now - getattr(self, "_last_flush", 0)) >= 15:
-				self._last_flush = now
+			now = time.monotonic()
+			if (self._pos, self._total) != self._last_saved and now - self._last_flush >= 15:
 				self._flush()
 		except Exception:
 			pass
 
 	def _flush(self):
-		if not self._key or self._pos < 30:
+		if not self._key or not self._sampled:
+			return
+		# Persist a backwards seek below 30s only after saving real progress.
+		if self._pos < 30 and self._last_saved is None:
 			return
 		try:
 			from streamhub import resume
 			resume.record(self._key, self._pos, self._total or 0, self._title)
+			self._last_saved = (self._pos, self._total)
+			self._last_flush = time.monotonic()
 		except Exception:
 			pass
 
@@ -482,7 +551,7 @@ class ResumeTracker(xbmc.Player):
 					resume.record(key, self._total, self._total, self._title)
 				else:
 					resume.mark_watched(key, self._title)
-			else:
+			elif self._sampled:
 				resume.record(key, self._pos, self._total or 0, self._title)
 		except Exception:
 			_log("resume commit failed", xbmc.LOGWARNING)
@@ -524,19 +593,15 @@ class ResumeTracker(xbmc.Player):
 		self._commit(ended=True)
 
 	def onPlayBackError(self):
-		self._reset()
+		self._commit(ended=False)
 
 
 def main():
 	_log("service started for %s v%s" % (ADDON_ID, _installed_version()))
 	monitor = SettingsMonitor()
-
-	_apply_buffer()
-
-	if monitor.waitForAbort(STARTUP_DELAY):
-		return
-
 	_add_resources_path()
+	# Register callbacks immediately: streams may start during the updater's
+	# startup grace period, and their resume metadata must still be consumed.
 	tracker = None
 	try:
 		tracker = ResumeTracker()
@@ -544,31 +609,35 @@ def main():
 	except Exception as e:
 		_log("resume tracker unavailable: %s" % e, xbmc.LOGWARNING)
 
-	now = int(time.time())
-	last = _last_check_ts()
-	due = (now - last) >= CHECK_INTERVAL_HOURS * 3600
-	if due or _setting("update_on_start") == "true":
-		try:
-			check_for_update()
-		except Exception as e:
-			_log("update check error: %s" % e, xbmc.LOGWARNING)
-		_set_last_check_ts(time.time())
+	monitor.buffer_changed = True
+	startup_until = time.monotonic() + STARTUP_DELAY
+	next_check = _last_check_ts() + CHECK_INTERVAL_HOURS * 3600
+	if _setting("update_on_start") == "true":
+		next_check = 0
 
 	while not monitor.abortRequested():
-		if monitor.waitForAbort(1):
-			break
-		if monitor.buffer_changed:
-			monitor.buffer_changed = False
-			_apply_buffer()
 		if tracker is not None:
 			tracker.sample()
-		if (time.time() - _last_check_ts()) >= CHECK_INTERVAL_HOURS * 3600:
+		idle = not _playback_active()
+		if monitor.buffer_changed and idle:
+			monitor.buffer_changed = False
+			_apply_buffer()
+		if idle and time.monotonic() >= startup_until and time.time() >= next_check:
+			result = False
 			try:
-				check_for_update()
+				result = check_for_update()
 			except Exception as e:
 				_log("update check error: %s" % e, xbmc.LOGWARNING)
-			_set_last_check_ts(time.time())
+			# None means playback started during the check: retry once idle.
+			if result is not None:
+				now = time.time()
+				_set_last_check_ts(now)
+				next_check = now + CHECK_INTERVAL_HOURS * 3600
+		if monitor.waitForAbort(1):
+			break
 
+	if tracker is not None:
+		tracker._flush()
 	_log("service stopped")
 
 

@@ -5,35 +5,45 @@ from streamhub.playback import configure_playback, split_stream_url, max_height
 chanicons = ['13thstreet.png', '3sat.png', 'animalplanet.png', 'anixe.png', 'ard.png', 'ardalpha.png', 'arte.png', 'atv.png', 'atv2.png', 'automotorsport.png', 'axnblack.png', 'axnwhite.png', 'br.png', 'cartoonito.png', 'cartoonnetwork.png', 'comedycentral.png', 'curiositychannel.png', 'fix&foxi.png', 'dazn1.png', 'dazn2.png', 'deluxemusic.png', 'nationalgeographic.png', 'dmax.png', 'eurosport1.png', 'eurosport2.png', 'nickjunior.png', 'superrtl.png', 'heimatkanal.png', 'history.png', 'hr.png', 'jukebox.png', 'kabel1doku.png', 'pro7.png', 'pro7maxx.png', 'pro7fun.png', 'rtl2.png', 'kika.png', 'kinowelt.png', 'mdr.png', 'universaltv.png', 'discovery.png', 'mtv.png', 'n24doku.png', 'natgeowild.png', 'sky1.png', 'ndr.png', 'nickelodeon.png', 'nitro.png', 'romancetv.png', 'ntv.png', 'one.png', 'orf1.png', 'orf2.png', 'orf3.png', 'orfsportplus.png', 'phoenix.png', 'geotv.png', 'puls24.png', 'puls4.png', 'rbb.png', 'ric.png', 'motorvision.png', 'rtl.png', 'rtlcrime.png', 'rtlliving.png', 'kabel1.png', 'rtlpassion.png', 'rtlup.png', 'sat1.png', 'sat1emotions.png', 'sat1gold.png', 'servustv.png', 'silverline.png', 'sixx.png', 'skyatlantic.png', 'skycinemaaction.png', 'skycinemaclassics.png', 'skycinemafamily.png', 'skycinemahighlights.png', 'skycinemapremieren.png', 'skycrime.png', 'skydocumentaries.png', 'skykrimi.png', 'skynature.png', 'skyreplay.png', 'skyshowcase.png', 'spiegelgeschichte.png', 'kabel1classics.png', 'sport1.png', 'sportdigital.png', 'swr.png', 'syfy.png', 'tagesschau24.png', 'tele5.png', 'tlc.png', 'toggoplus.png', 'crime+investigation.png', 'vox.png', 'voxup.png', 'warnertvcomedy.png', 'warnertvfilm.png', 'warnertvserie.png', 'wdr.png', 'welt.png', 'weltderwunder.png', 'zdf.png', 'zdfinfo.png', 'zdfneo.png', 'zeeone.png', 'skycinemathriller.png']
 
 def resolve_link(link):
-	if link.startswith("dlhd://") or link.startswith("dlhdppv://") or link.startswith("dlhdstreamed://"):
-		from streamhub.dlhd import resolve_any
-		try:
-			url, qs = resolve_any(link)
-			return url, qs
-		except Exception:
-			log(format_exc())
-			return None, None
-	if not "vavoo" in link:
-		from streamhub.stalker import StalkerPortal
-		try:
-			link, headers = StalkerPortal(get_cache_or_setting("stalkerurl"), get_cache_or_setting("mac")).get_tv_stream_url(link)
-			status = int(request("GET", link, headers=headers, timeout=10, max_bytes=0, retries=0).status_code)
-			log(f"function resolve_link Staus :{status}")
-			if status < 400:
-				return link, urlencode(headers)
-		except Exception:
-			log(format_exc())
-		else:
-			return None, None
-	else:
-		_headers = {"user-agent": "MediaHubMX/2", "accept": "application/json", "content-type": "application/json; charset=utf-8", "content-length": "115", "accept-encoding": "gzip", "mediahubmx-signature": getAuthSignature()}
-		_data = {"language": "de", "region": "AT", "url": link, "clientVersion": "3.0.2"}
-		url = "https://vavoo.to/mediahubmx-resolve.json"
-		streamurl = request_json("POST", url, json=_data, headers=_headers, timeout=10, retries=1)[0]["url"]
-		status = int(request("GET", streamurl, timeout=10, max_bytes=0, retries=0, verify=False).status_code)
-		log(f"function resolve_link Staus :{status}")
-		if status < 400: return streamurl, None
+	"""A bad live mirror must not prevent trying the remaining candidates."""
+	if not isinstance(link, str) or not link:
 		return None, None
+	try:
+		if link.startswith(("dlhd://", "dlhdppv://", "dlhdstreamed://")):
+			from streamhub.dlhd import resolve_any
+			return resolve_any(link)
+		if "vavoo" not in link:
+			from streamhub.stalker import StalkerPortal
+			streamurl, headers = StalkerPortal(
+				get_cache_or_setting("stalkerurl"), get_cache_or_setting("mac")).get_tv_stream_url(link)
+		else:
+			signature = getAuthSignature()
+			if not signature:
+				return None, None
+			api_headers = {"user-agent": "MediaHubMX/2", "accept": "application/json",
+			               "content-type": "application/json; charset=utf-8",
+			               "mediahubmx-signature": signature}
+			payload = {"language": "de", "region": "AT", "url": link, "clientVersion": "3.0.2"}
+			result = request_json("POST", "https://vavoo.to/mediahubmx-resolve.json",
+			                      json=payload, headers=api_headers, timeout=8, retries=0,
+			                      max_bytes=256 * 1024)
+			if not isinstance(result, list) or not result or not isinstance(result[0], dict):
+				return None, None
+			streamurl = result[0].get("url")
+			headers = result[0].get("headers") or None
+		if not isinstance(streamurl, str) or not streamurl:
+			return None, None
+		streamurl, encoded = split_stream_url(streamurl, headers)
+		if urlparse(streamurl).scheme not in ("http", "https"):
+			return None, None
+		response = request("GET", streamurl, headers=dict(parse_qsl(encoded)),
+		                   timeout=5, max_bytes=0, retries=0)
+		if response.status_code < 400:
+			return streamurl, encoded or None
+	except Exception:
+		log(format_exc())
+	return None, None
+
 
 def get_stalker_channels(genres=False):
 	if genres == False: cacheOk, genres = get_cache("stalker_groups")
@@ -133,6 +143,11 @@ def livePlay(name, type=None, group=None):
 		else:
 			log("live_alive_check: all candidates failed, falling back to full list")
 
+	if prog.iscanceled() or monitor.abortRequested():
+		prog.close()
+		fail_resolved()
+		return
+
 	title = None
 	host_select = getSetting("live_host_select") == "true"
 	if len(candidates) > 1 and host_select:
@@ -142,6 +157,7 @@ def livePlay(name, type=None, group=None):
 		if i < 0:
 			fail_resolved()
 			return
+		prog = StatusProgress("StreamHub")
 	else:
 		i = 0
 		if len(candidates) > 1:
@@ -155,6 +171,10 @@ def livePlay(name, type=None, group=None):
 	url, headers = None, None
 	tried = 0
 	while tried < len(candidates):
+		if prog.iscanceled() or monitor.abortRequested():
+			prog.close()
+			fail_resolved()
+			return
 		prog.step(80, "Verbinde …", candidates[i].get("label", ""),
 		          stats_line(pending=len(candidates) - tried))
 		url, headers = resolve_link(candidates[i]["url"])
@@ -162,11 +182,17 @@ def livePlay(name, type=None, group=None):
 		log("resolve_link failed for %s, trying next" % candidates[i]["label"])
 		i = (i + 1) % len(candidates)
 		tried += 1
+	if prog.iscanceled() or monitor.abortRequested():
+		prog.close()
+		fail_resolved()
+		return
 	prog.close()
+
 	if not url:
 		fail_resolved("Stream nicht abrufbar")
 		return
 
+	title = "%s [%s]" % (name, candidates[i]["label"]) if len(candidates) > 1 else name
 	try:
 		orig_i = m.index(candidates[i]["url"])
 	except ValueError:

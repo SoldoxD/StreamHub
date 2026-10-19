@@ -5,7 +5,7 @@ from html import unescape
 from urllib.parse import quote
 
 from lib.scrapers import register
-from lib.scrapers.base import BaseScraper
+from lib.scrapers.base import BaseScraper, Cancelled
 
 _CARD_RE = re.compile(
 	r'<a[^>]+href="(https?://ramoflix\.net/[^"/]+/)"[^>]*>\s*'
@@ -48,7 +48,7 @@ class RamoflixScraper(BaseScraper):
 	enabled_setting = "ramoflix"
 
 	def page_kind(self, url):
-		"""'movie', 'series', 'other', or None when it could not be determined."""
+		"""'movie', 'series', or None when it could not be determined."""
 		from lib.scrapers.base import cache_get, cache_set
 		ck = "k|ramoflix|" + url
 		hit = cache_get(ck)
@@ -56,7 +56,9 @@ class RamoflixScraper(BaseScraper):
 			return hit
 		try:
 			r = self.fetch(url, max_bytes=_KIND_BYTES)
-			html = (r.text or "") if r is not None else ""
+			html = (r.text or "") if r is not None and r.status_code < 400 else ""
+		except Cancelled:
+			raise
 		except Exception:
 			html = ""
 		if not html:
@@ -66,7 +68,9 @@ class RamoflixScraper(BaseScraper):
 		elif "var Servers" in html:
 			kind = "movie"
 		else:
-			kind = "other"
+			# A truncated page or verification response cannot identify the type.
+			# Do not exclude the movie from searches for the next 24 hours.
+			return None
 		cache_set(ck, kind, _KIND_TTL)
 		return kind
 

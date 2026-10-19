@@ -25,12 +25,12 @@ class ProviderTests(unittest.TestCase):
         package.register = lambda cls: cls
         modules = {"streamhub.utils": utils, "lib": types.ModuleType("lib"),
                    "lib.scrapers": package}
-        for name in ("base", "html_catalog", "hdfilme", "streamkiste"):
+        for name in ("base", "html_catalog", "hdfilme", "streamkiste", "ramoflix"):
             modules["lib.scrapers." + name] = None
         self.patch = patch.dict(sys.modules, modules)
         self.patch.start()
         self.addCleanup(self.patch.stop)
-        for name in ("base", "html_catalog", "hdfilme", "streamkiste"):
+        for name in ("base", "html_catalog", "hdfilme", "streamkiste", "ramoflix"):
             spec = importlib.util.spec_from_file_location("lib.scrapers." + name, DIRECTORY / (name + ".py"))
             module = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = module
@@ -134,6 +134,24 @@ class ProviderTests(unittest.TestCase):
             self.assertEqual(scraper.search(""), [])
             self.assertEqual(scraper.search("Show", "tvshow"), [])
             scraper.fetch_text.assert_not_called()
+
+    def test_ramoflix_unknown_or_error_page_does_not_poison_type_cache(self):
+        scraper = self.ramoflix.RamoflixScraper()
+        for status, body in ((403, "var Servers = {};"),
+                             (200, "<html>Verification required</html>")):
+            with self.subTest(status=status):
+                scraper.fetch = Mock(return_value=types.SimpleNamespace(status_code=status, text=body))
+                self.assertIsNone(scraper.page_kind("https://ramoflix.net/film/"))
+                self.assertIsNone(self.base.cache_get("k|ramoflix|https://ramoflix.net/film/"))
+        scraper.fetch = Mock(return_value=types.SimpleNamespace(status_code=200, text="var Servers = {};"))
+        self.assertEqual(scraper.page_kind("https://ramoflix.net/film/"), "movie")
+        self.assertEqual(self.base.cache_get("k|ramoflix|https://ramoflix.net/film/"), "movie")
+
+    def test_ramoflix_type_check_propagates_cancellation(self):
+        scraper = self.ramoflix.RamoflixScraper()
+        scraper.fetch = Mock(side_effect=self.base.Cancelled())
+        with self.assertRaises(self.base.Cancelled):
+            scraper.page_kind("https://ramoflix.net/film/")
 
     def test_html_url_helper_rejects_non_http_and_credentials(self):
         helper = self.html_catalog.http_url

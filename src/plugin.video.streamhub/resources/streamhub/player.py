@@ -49,6 +49,10 @@ class XstreamPlayer(player):
     def onPlayBackEnded(self):
         self.onPlayBackStopped()
 
+    def onPlayBackError(self):
+        self.streamSuccess = False
+        self.streamFinished = True
+
 
 class cPlayer:
     def clearPlayList(self):
@@ -60,8 +64,12 @@ class cPlayer:
 
     def startPlayer(self):
         xbmcPlayer = XstreamPlayer()
-        while (not monitor.abortRequested()) & (not xbmcPlayer.streamFinished):
-            if xbmcPlayer.isPlayingVideo():
-                xbmcPlayer.playedTime = xbmcPlayer.getTime()
-            monitor.waitForAbort(10)
+        while not monitor.abortRequested() and not xbmcPlayer.streamFinished:
+            try:
+                if xbmcPlayer.isPlayingVideo():
+                    xbmcPlayer.playedTime = xbmcPlayer.getTime()
+            except RuntimeError:
+                # Playback can stop between isPlayingVideo() and getTime().
+                pass
+            monitor.waitForAbort(1)
         return xbmcPlayer.streamSuccess

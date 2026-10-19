@@ -1,3 +1,7 @@
+from concurrent.futures import wait, FIRST_COMPLETED
+from threading import Event
+from time import monotonic
+
 
 from streamhub.utils import (
 	request, log, urlparse, ThreadPoolExecutor, as_completed, format_exc,
@@ -72,17 +76,31 @@ def filter_alive(candidates, timeout=5, max_workers=8, prog=None, deadline_s=8.0
 	ok = 0
 	dead = 0
 	alive = {}
-	with ThreadPoolExecutor(max_workers=min(max_workers, total)) as ex:
-		futures = {ex.submit(_check_one, c["url"], timeout): i
-		           for i, c in enumerate(candidates)}
-		try:
-			for fut in as_completed(futures, timeout=deadline_s):
-				i = futures[fut]
+	stop = Event()
+	def check(candidate):
+		if stop.is_set():
+			return None
+		return _check_one(candidate["url"], timeout)
+
+	if prog and prog.iscanceled():
+		return []
+	ex = ThreadPoolExecutor(max_workers=max(1, min(max_workers, total)))
+	futures = {ex.submit(check, candidate): i for i, candidate in enumerate(candidates)}
+	pending = set(futures)
+	deadline = monotonic() + deadline_s
+	try:
+		while pending:
+			if (prog and prog.iscanceled()) or monotonic() >= deadline:
+				break
+			finished, pending = wait(pending, timeout=min(0.1, max(0, deadline - monotonic())),
+			                         return_when=FIRST_COMPLETED)
+			for future in finished:
+				i = futures[future]
 				try:
-					alive[i] = fut.result()
+					alive[i] = future.result()
 				except Exception:
 					alive[i] = False
-				candidates[i]["_alive"] = bool(alive[i])
+				candidates[i]["_alive"] = alive[i]
 				done += 1
 				if alive[i]:
 					ok += 1
@@ -93,10 +111,15 @@ def filter_alive(candidates, timeout=5, max_workers=8, prog=None, deadline_s=8.0
 					          "Prüfe Quellen %d/%d" % (done, total),
 					          candidates[i].get("label", ""),
 					          stats_line(ok=ok, dead=dead, pending=total - done))
-					if prog.iscanceled():
-						break
-		except Exception:
-			log("filter_alive: deadline reached after %d/%d" % (done, total))
+	finally:
+		stop.set()
+		for future in futures:
+			future.cancel()
+		try:
+			ex.shutdown(wait=False, cancel_futures=True)
+		except TypeError:
+			ex.shutdown(wait=False)
+
 	return [c for i, c in enumerate(candidates) if alive.get(i, False)]
 
 

@@ -2,14 +2,26 @@
 from streamhub.utils import *
 
 def vavoo_groups():
-	log("Getting VAVOO groups and md5")
-	groups=[]
-	a = request("GET", "https://www2.vavoo.to/live2/index?output=json", timeout=10, retries=1).text
-	hash = md5(a.encode()).hexdigest()
-	chans = json.loads(a)
-	for c in chans:
-		if c["group"] not in groups: groups.append(c["group"])
-	return sorted(groups), hash
+	# The index is shared by every channel start; do not download it on each zap.
+	ok, cached = get_cache("vavoo_group_index")
+	if (ok and isinstance(cached, dict) and isinstance(cached.get("groups"), list)
+	        and cached.get("hash")):
+		return cached["groups"], cached["hash"]
+	response = request("GET", "https://www2.vavoo.to/live2/index?output=json",
+	                   timeout=8, retries=0, max_bytes=8 * 1024 * 1024)
+	response.raise_for_status()
+	body = response.text
+	channels = json.loads(body)
+	if not isinstance(channels, list):
+		raise ValueError("Invalid VAVOO channel index")
+	groups = sorted({row["group"] for row in channels if isinstance(row, dict)
+	                 and isinstance(row.get("group"), str) and row["group"]})
+	if not groups:
+		raise ValueError("Empty VAVOO channel index")
+	digest = md5(body.encode()).hexdigest()
+	set_cache("vavoo_group_index", {"groups": groups, "hash": digest}, timeout=10.0 / 60)
+	return groups, digest
+
 
 def choose():
 	groups, hash = vavoo_groups()
@@ -32,23 +44,42 @@ def new_vav_channels(group, sig=None):
 	if not sig:
 		log("VAVOO: no auth signature for group %s" % group)
 		return group, [], False
-	_headers={"user-agent": "MediaHubMX/2", "accept": "application/json", "content-type": "application/json; charset=utf-8", "accept-encoding": "gzip", "mediahubmx-signature": sig}
-	items = []
+	headers = {"user-agent": "MediaHubMX/2", "accept": "application/json",
+	           "content-type": "application/json; charset=utf-8", "mediahubmx-signature": sig}
+	items, seen_cursors, seen_urls = [], set(), set()
 	cursor = 0
-	while cursor != None:
-		try:
-			_data={"language":"de","region":"AT","catalogId":"iptv","id":"iptv","adult":False,"search":"","sort":"name","filter":{"group":group},"cursor":cursor,"clientVersion":"3.1.0"}
-			req = request_json("POST", "https://vavoo.to/mediahubmx-catalog.json", json=_data, headers=_headers, timeout=15, retries=2)
-			if not isinstance(req, dict) or "items" not in req:
-				log("VAVOO: bad catalog payload for group %s" % group)
-				return group, items, False
-			for r in req["items"]:
-				items.append({"url": r["url"], "name": r["name"], "group": r["group"]})
-			cursor = req.get("nextCursor")
-		except Exception:
-			log("VAVOO: group %s failed at cursor %s\n%s" % (group, cursor, format_exc()))
+	deadline = time.monotonic() + 20
+	for _ in range(100):
+		if monitor.abortRequested() or time.monotonic() >= deadline:
 			return group, items, False
-	return group, items, True
+		cursor_key = json.dumps(cursor, sort_keys=True)
+		if cursor_key in seen_cursors:
+			log("VAVOO: repeated catalog cursor for %s" % group)
+			return group, items, False
+		seen_cursors.add(cursor_key)
+		try:
+			payload = {"language": "de", "region": "AT", "catalogId": "iptv", "id": "iptv",
+			           "adult": False, "search": "", "sort": "name", "filter": {"group": group},
+			           "cursor": cursor, "clientVersion": "3.1.0"}
+			result = request_json("POST", "https://vavoo.to/mediahubmx-catalog.json",
+			                      json=payload, headers=headers, timeout=min(6, max(0.1, deadline - time.monotonic())),
+			                      retries=0, max_bytes=2 * 1024 * 1024)
+			if not isinstance(result, dict) or not isinstance(result.get("items"), list):
+				return group, items, False
+			for row in result["items"]:
+				if not isinstance(row, dict) or not all(isinstance(row.get(k), str) and row[k]
+				                                      for k in ("url", "name", "group")):
+					continue
+				if row["url"] not in seen_urls:
+					seen_urls.add(row["url"])
+					items.append({k: row[k] for k in ("url", "name", "group")})
+			cursor = result.get("nextCursor")
+			if cursor is None:
+				return group, items, True
+		except Exception:
+			log("VAVOO: catalog failed for %s\n%s" % (group, format_exc()))
+			return group, items, False
+	return group, items, False
 
 _COUNTRY_CODES = {
 	"germany": "DE", "deutschland": "DE",
@@ -106,7 +137,17 @@ def default_groups(all_groups):
 
 def get_vav_channels(groups = False):
 	if groups == False: cacheOk, groups = get_cache("groups")
-	g, newhash = vavoo_groups()
+	cacheOk, chan = get_cache("vav_channels")
+	cached_channels = chan.get("channels") if cacheOk and isinstance(chan, dict) else []
+	index_failed = False
+	try:
+		g, newhash = vavoo_groups()
+	except Exception:
+		log("VAVOO: index unavailable; using cached channels\n%s" % format_exc())
+		if not cached_channels:
+			return {}
+		g = sorted({row["group"] for row in cached_channels})
+		newhash, index_failed = "", True
 	if not groups:
 		groups = default_groups(g)
 		if groups:
@@ -115,16 +156,19 @@ def get_vav_channels(groups = False):
 		return {}
 	groups = [x for x in groups if x in g] or default_groups(g)
 	key = "%s|%s" % (newhash, ",".join(sorted(groups)))
-	cacheOk, chan = get_cache("vav_channels")
-	if cacheOk and isinstance(chan, dict) and chan.get("key") == key and chan.get("channels"):
+	if cacheOk and isinstance(chan, dict) and (index_failed or chan.get("key") == key) and chan.get("channels"):
 		channels = chan["channels"]
 	else:
 		log("Getting new VAVOO Channels for groups: %s" % ", ".join(groups))
 		sig = getAuthSignature()
 		channels = []
 		failed = []
+		if not sig:
+			# Do not repeat a failed login independently in every group worker.
+			channels = cached_channels or []
+			failed = list(groups)
 		with ThreadPoolExecutor(max_workers=min(6, max(len(groups), 1))) as _ex:
-			futs = [_ex.submit(new_vav_channels, grp, sig) for grp in groups]
+			futs = [_ex.submit(new_vav_channels, grp, sig) for grp in groups] if sig else []
 			for fut in futs:
 				try:
 					grp, items, ok = fut.result()
