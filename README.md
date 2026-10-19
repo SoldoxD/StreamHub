@@ -227,3 +227,29 @@ Research sources: [the supplied FMHY German list](https://fmhy.net/non-english#g
 [Movie2k](https://movie2k.cx), [Einschalten](https://einschalten.in),
 [maintained Dood resolver](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/doodstream.py),
 [maintained Dropload resolver](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/dropload.py).
+
+
+## Movie source defaults and Kinox update 2026.10.19.1
+
+Install `plugin.video.streamhub/plugin.video.streamhub-2026.10.19.1.zip` or use
+StreamHub's update check, restart Kodi, and open StreamHub once.
+Movie2k and Kinox are enabled by default. The first launch of this update also
+activates both sources on existing installations, including saved off settings.
+This activation happens once; subsequent changes under Sources are respected.
+Kinox's source toggle is now visible at the basic settings level.
+
+Kinox's public-link parser has been repaired for normal iframe/anchor attributes,
+direct host URLs in mirror responses, and ordinary HTTP redirects. Requests and
+mirror collection are bounded. Verification pages are skipped without repeated
+reload attempts or presenting a provider redirect as a playable host.
+
+**Current limitation:** the tested Kinox movie's host redirects still return a
+verification page. The parser fixes do not unlock those protected mirrors, so
+successful Kinox playback could not be verified. No protection challenge was
+solved or media downloaded. Fire TV playback remains untested.
+
+Validation: **215 offline tests passed**, including 16 Kinox regressions and
+five upgrade-setting tests. The live updated scraper found Inception and parsed
+its Vinovo/Dood host entries; both redirect pages remained protected, with only
+one request per verification page. Syntax compilation and release ZIP/source,
+version, checksum, and enabled-default checks passed.

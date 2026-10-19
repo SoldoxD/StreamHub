@@ -117,8 +117,8 @@
 					<control type="toggle"/>
 				</setting>
 				<setting id="kinox" type="boolean" label="30035" help="30039">
-					<level>2</level>
-					<default>false</default>
+					<level>0</level>
+					<default>true</default>
 					<control type="toggle"/>
 				</setting>
 				<setting id="hdfilme" type="boolean" label="30085">
@@ -153,6 +153,11 @@
 				</setting>
 			</group>
 			<group id="3">
+				<setting id="_movie_provider_defaults_20261019_1" type="boolean">
+					<level>4</level>
+					<default>false</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="host_support_status" type="action" label="30087">
 					<level>0</level>
 					<data>RunPlugin(plugin://plugin.video.streamhub/?action=host_support_status)</data>

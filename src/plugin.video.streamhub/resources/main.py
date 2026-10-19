@@ -4,6 +4,8 @@
 
 if __name__ == "__main__":
 	from streamhub.utils import *
+	from streamhub.provider_defaults import apply as apply_provider_defaults
+	apply_provider_defaults()
 	from streamhub import vjackson, stalker, vavoo_tv, vjlive, soccer, movies, series, sport
 	params = dict(parse_qsl(sys.argv[2][1:]))
 	tv = params.get("name")

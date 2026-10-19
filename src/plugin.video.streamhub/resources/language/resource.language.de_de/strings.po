@@ -208,8 +208,8 @@ msgid "movie4k.sx"
 msgstr "movie4k.sx"
 
 msgctxt "#30039"
-msgid "kinox.to blocks automated access to its hoster links (anti-bot redirect). Search works, but streams usually cannot be extracted. Off by default."
-msgstr "kinox.to blockiert automatisierte Zugriffe auf die Hoster-Links (Anti-Bot-Weiterleitung). Die Suche funktioniert, Streams lassen sich meist nicht extrahieren. Standardmäßig aus."
+msgid "Search kinox.to and use public host links. Protected or unavailable mirrors may not play. Enabled by default."
+msgstr "kinox.to durchsuchen und öffentliche Hoster-Links nutzen. Geschützte oder nicht verfügbare Quellen lassen sich möglicherweise nicht abspielen. Standardmäßig aktiviert."
 
 msgctxt "#30070"
 msgid "Video buffer (RAM)"

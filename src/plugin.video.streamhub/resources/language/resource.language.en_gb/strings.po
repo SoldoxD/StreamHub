@@ -208,7 +208,7 @@ msgid "movie4k.sx"
 msgstr ""
 
 msgctxt "#30039"
-msgid "kinox.to blocks automated access to its hoster links (anti-bot redirect). Search works, but streams usually cannot be extracted. Off by default."
+msgid "Search kinox.to and use public host links. Protected or unavailable mirrors may not play. Enabled by default."
 msgstr ""
 
 msgctxt "#30070"

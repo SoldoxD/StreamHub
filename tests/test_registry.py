@@ -49,13 +49,15 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertNotIn('serienstream', names)
         self.assertIn('vavoo', names)
         self.assertIn('movie4k', names)
-        self.assertNotIn('kinox', names)
+        self.assertIn('kinox', names)
 
     def test_disabled_new_sources_are_not_scheduled_for_search(self):
-        self.settings.update(hdfilme='false', streamkiste='false')
+        self.settings.update(hdfilme='false', streamkiste='false', movie2k='false', kinox='false')
         names = {provider.name for provider in self.adapter.movie_providers()}
         self.assertNotIn('hdfilme', names)
         self.assertNotIn('streamkiste', names)
+        self.assertNotIn('movie2k', names)
+        self.assertNotIn('kinox', names)
 
     def test_serienstream_reaches_real_series_search_and_episode_adapter(self):
         self.settings.update(vavoo='false', movie4k='false', movies67='false')
