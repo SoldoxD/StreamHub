@@ -72,7 +72,7 @@ if __name__ == "__main__":
 		status = ("ResolveURL aktiv: " + version if available else
 		          "ResolveURL nicht aktiv. Das optionale Kodi-Modul erweitert die Hoster-Unterstützung.")
 		dialog.ok("StreamHub - Hoster-Unterstützung",
-		          "Integriert: Doodstream, VOE, Filemoon, Streamtape, Mixdrop und weitere.\n"
+		          "Integriert: Doodstream, Dropload, VOE, Filemoon, Streamtape, Mixdrop und weitere.\n"
 		          "Erweiterte Player-Erkennung: StreamWish/StreamHG, FileLions/VidHide, LuluStream, Uqload.\n\n"
 		          + status + "\nEinzelne Seiten können sich ändern oder den Zugriff blockieren.")
 

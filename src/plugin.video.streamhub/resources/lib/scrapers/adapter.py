@@ -62,7 +62,23 @@ class SeriesAdapter:
 			            "_id": s.get("id")})
 		return out
 
+	def get_episodes(self, series, season_number):
+		reader = getattr(self._s, "get_episodes", None)
+		try:
+			if callable(reader):
+				return reader(dict(series), season_number) or []
+			count = self.get_episode_count(series, season_number)
+			return [{"episode_number": number} for number in range(1, count + 1)]
+		except Cancelled:
+			raise
+		except Exception:
+			log("%s: episodes failed\n%s" % (self.name, format_exc()))
+			return []
+
 	def get_episode_count(self, series, season_number):
+		reader = getattr(self._s, "get_episodes", None)
+		if callable(reader):
+			return len(self.get_episodes(series, season_number))
 		item = dict(series)
 		item["season"] = season_number
 		try:

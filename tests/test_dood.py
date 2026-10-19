@@ -122,7 +122,52 @@ class DoodTests(unittest.TestCase):
         result = self.resolve([page(self.embed, "Just a moment: challenge-platform", 403)])
         self.assertIsNone(result)
         self.assertEqual(self.request.call_count, 1)
-        self.module["mark_blocked"].assert_called_once_with(self.embed)
+        self.module["mark_blocked"].assert_not_called()
+        self.assertEqual(self.module["get_resolve_failure"](self.embed), "protected")
+
+    def test_redirected_challenge_is_reported_for_same_file_across_dood_aliases(self):
+        original = "https://doodstream.com/e/AbC123"
+        self.resolve([page(self.embed, "Just a moment: cf_chl_opt", 403)], original)
+        failure = self.module["get_resolve_failure"]
+        self.assertEqual(failure(original), "protected")
+        self.assertEqual(failure("https://do7go.com/d/AbC123"), "protected")
+        self.assertIsNone(failure("https://doodstream.com/e/Other456"))
+        self.assertIsNone(failure("https://unrelated.invalid/e/AbC123"))
+        self.module["mark_blocked"].assert_not_called()
+
+    def test_http_200_captcha_stops_generic_fallback(self):
+        captcha = '<form><div class="cf-turnstile" data-sitekey="fixture"></div></form>'
+        self.request.side_effect = [page(self.embed, captcha)]
+        generic = self.module["resolve_generic"] = Mock()
+        self.assertIsNone(self.module["resolve"](self.embed))
+        self.assertEqual(self.module["get_resolve_failure"](self.embed), "protected")
+        self.assertEqual(self.request.call_count, 1)
+        generic.assert_not_called()
+
+    def test_pass_endpoint_challenge_marks_original_file(self):
+        result = self.resolve([page(self.embed, self.html),
+                               page(self.endpoint, 'Just a moment: cf_chl_opt', 403)])
+        self.assertIsNone(result)
+        self.assertEqual(self.module["get_resolve_failure"](self.embed), "protected")
+
+    def test_retry_can_recover_and_clear_protection_diagnostic(self):
+        self.resolve([page(self.embed, "Just a moment: challenge-platform", 403)])
+        result = self.resolve([page(self.embed, self.html),
+                               page(self.endpoint, "https://cdn.invalid/video.mp4")])
+        self.assertIsNotNone(result)
+        self.assertIsNone(self.module["get_resolve_failure"](self.embed))
+
+    def test_protection_diagnostic_expires_and_stays_bounded(self):
+        self.resolve([page(self.embed, "Just a moment", 403)])
+        self.module["_time"].time = lambda: 1700000301
+        self.assertIsNone(self.module["get_resolve_failure"](self.embed))
+        for i in range(140):
+            self.module["_set_resolve_failure"]("https://playmogo.com/e/ID%d" % i, "protected")
+        self.assertEqual(len(self.module["_RESOLVE_FAILURES"]), 128)
+
+    def test_plain_http_error_is_not_mislabeled_as_captcha(self):
+        self.assertIsNone(self.resolve([page(self.embed, "File not found", 404)]))
+        self.assertIsNone(self.module["get_resolve_failure"](self.embed))
 
     def test_failed_pass_request_does_not_create_playable_url(self):
         result = self.resolve([page(self.embed, self.html), page(self.endpoint, "https://cdn.invalid/prefix", 500)])

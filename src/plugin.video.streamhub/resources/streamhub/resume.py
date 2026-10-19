@@ -216,9 +216,16 @@ def next_up(tmdb_id, title=None):
 	last = watched[-1]
 	s, ep = _se(last)
 	cnt = int(last.get("episode_count") or 0)
+	from streamhub.episode_navigation import next_episode_number
+	available = (last.get("params") or {}).get("episode_numbers")
+	next_number = next_episode_number(ep, cnt, available)
+	if next_number is not None:
+		return {"season": str(s), "episode": str(next_number), "resume": False}
+	if available is not None:
+		return None
 	if cnt and ep >= cnt:
 		return {"season": str(s + 1), "episode": "1", "resume": False}
-	return {"season": str(s), "episode": str(ep + 1), "resume": False}
+	return None
 
 
 def announce_playing(item):

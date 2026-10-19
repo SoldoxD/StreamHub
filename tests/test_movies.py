@@ -1,4 +1,5 @@
 """Offline regression tests for the real movie selection/playback integration."""
+import ast
 import importlib.util
 import json
 import re
@@ -181,6 +182,58 @@ class MovieTests(unittest.TestCase):
                              ('https://cdn.invalid/stream.mp4', None))
         native.resolve.assert_called_once_with('https://host.invalid/e/a', 'https://host.invalid/e/a', generic=False)
         generic.resolve_public_embed.assert_not_called()
+
+    def test_protected_native_host_does_not_retry_external_or_generic(self):
+        state = {'failure': None}
+        def native_resolve(*args, **kwargs):
+            state['failure'] = 'protected'
+        native = types.SimpleNamespace(resolve=Mock(side_effect=native_resolve),
+            is_blocked=Mock(return_value=False),
+            get_resolve_failure=lambda url: state['failure'])
+        generic = types.SimpleNamespace(resolve_public_embed=Mock())
+        self.movies._resolve_external = Mock()
+        host = {'url': 'https://dr0pstream.com/e/fixture'}
+        with patch.dict(sys.modules, {'streamhub.resolvers': native, 'streamhub.host_support': generic}):
+            self.assertIsNone(self.movies._resolve_embed(host))
+            self.assertIsNone(self.movies._resolve_embed(host))
+        native.resolve.assert_called_once()
+        self.movies._resolve_external.assert_not_called()
+        generic.resolve_public_embed.assert_not_called()
+        self.assertEqual(host['_failure'], 'protected')
+
+    def test_vavoo_chain_stops_after_observed_host_protection(self):
+        source = SOURCE / 'vjackson.py'
+        tree = ast.parse(source.read_text(encoding='utf-8'))
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'resolve')
+        external = Mock()
+        remote = Mock(side_effect=AssertionError('Protected host must not be retried'))
+        namespace = {'log': Mock(), 'resolveurl': external, 'request_json': remote,
+                     'getAuthSignature': remote, 'format_exc': lambda: 'test error', 'callApi2': remote}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), 'exec'), namespace)
+        native = types.SimpleNamespace(resolve=Mock(return_value=None),
+            get_resolve_failure=lambda url: 'protected')
+        with patch.dict(sys.modules, {'streamhub.resolvers': native}):
+            self.assertIsNone(namespace['resolve']({'url': 'https://doodstream.com/e/fixture'}))
+        native.resolve.assert_called_once()
+        external.resolve.assert_not_called()
+        remote.assert_not_called()
+
+    def test_protected_host_is_labelled_as_protected_not_dead(self):
+        label = self.movies._host_display({'host': 'Dood', '_failure': 'protected', '_alive': False})
+        self.assertIn('Schutzpruefung'.replace('ue', '\u00fc'), label)
+        self.assertNotIn('[COLOR red]tot', label)
+
+    def test_protected_picker_failure_is_explained_without_claiming_dead_file(self):
+        self.settings['fresh_start'] = 'false'
+        host = {'url': 'https://dr0pstream.com/e/fixture', '_failure': 'protected'}
+        self.movies._resolve_host = Mock(return_value=None)
+        self.movies.selectDialog = Mock(return_value=0)
+        self.movies.fail_resolved = Mock()
+        native = types.SimpleNamespace(get_resolve_failure=lambda url: 'protected')
+        with patch.dict(sys.modules, {'streamhub.resolvers': native}):
+            self.movies.choose_and_play({}, [host], 'Film', Mock(), True, False)
+        self.assertIsNone(host['_alive'])
+        self.assertIn('Schutzpruefung'.replace('ue', '\u00fc'), self.movies.fail_resolved.call_args.args[0])
 
     def test_dood_source_does_not_probe_signed_cdn_url(self):
         self.movies.request = Mock()

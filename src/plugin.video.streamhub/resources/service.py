@@ -504,8 +504,9 @@ class ResumeTracker(xbmc.Player):
 				return
 			cur = int(params.get("episode") or 0)
 			total = int(meta.get("episode_count") or 0)
-			nxt = cur + 1
-			if cur <= 0 or (total and nxt > total):
+			from streamhub.episode_navigation import next_episode_number
+			nxt = next_episode_number(cur, total, params.get("episode_numbers"))
+			if nxt is None:
 				return
 			np = dict(params)
 			np["episode"] = str(nxt)

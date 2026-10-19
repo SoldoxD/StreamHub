@@ -1,6 +1,6 @@
 # StreamHub for Kodi
 
-Kodi 21+ video add-on. Live TV, movies and series with xstream-style multi-host picker across Vavoo, 67movies, ramoflix, filmpalast and kinox.
+Kodi 21+ video add-on. Live TV, movies and series with xstream-style multi-host picker across Vavoo, 67movies, ramoflix, filmpalast, kinox, HDfilme, StreamKiste, Movie2k, Einschalten and SerienStream.
 
 ## Install
 
@@ -178,3 +178,52 @@ Install the newest update, restart Kodi, and select the StreamKiste VOE mirror
 (`goofy-banana.com`) or Mixdrop (`mxdrop.to`) when retesting this title.
 
 Alias reference: [maintained VOE host resolver](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/voesx.py).
+
+
+## Provider and host update 2026.10.19
+
+Install `plugin.video.streamhub/plugin.video.streamhub-2026.10.19.zip` or use
+StreamHub's update check, then restart Kodi. The three new providers are enabled
+by default and can be disabled individually under Sources.
+
+- **SerienStream (`serienstream.to`)**: series search, observed seasons including
+  season 0/specials, actual episode numbers/titles, and language-labelled host
+  links. Public host redirects are resolved without requesting media. Series
+  navigation now supports additional providers and falls back when another
+  provider has no season metadata. Automatic-next and resume use listed episode
+  numbers, so gaps do not create fictitious episodes. Disabled series providers
+  are excluded from both lookup and the episode-host cache key.
+- **Movie2k (`movie2k.cx`)**: film search and explicit player mirror links.
+- **Einschalten (`einschalten.in`)**: film search and player links through its
+  public catalog API. These two additions are movie-only.
+- **Dropload**: dedicated support for public player pages on `dropload.io`,
+  `dropload.tv`, `dropload.pro`, `dropload.co`, and `dr0pstream.com`; normalized
+  embed paths, bounded HTML requests, literal/packed player sources and media
+  request headers. Commented-out sources and unrelated advertising are ignored.
+- **Dood / Dropload protection handling**: HTTP-200 captcha forms are detected
+  as well as HTTP-403 protection pages. Dood aliases for the same file share a
+  short-lived diagnostic without marking unrelated files on the host dead.
+  The picker explains the protection response, and movie/Vavoo routes avoid
+  passing the same blocked page through more resolvers. No challenge forms are
+  submitted or solved by StreamHub.
+
+Validation on 2026-10-19: 194 offline tests passed. Actual SerienStream methods
+returned Breaking Bad, seasons 0–5, seven episodes in season 1 and German/English
+VOE links for episode 1. Movie2k and Einschalten returned an Inception result and
+host links. Independent Movie2k/SerienStream resolution reached HTTP-200 HLS
+master playlists with the returned headers (694/695 bytes); no film segments
+were downloaded. Full playback on the user's Fire TV remains untested.
+
+**Current limitation:** the previously reported Spider-Man Dood link still
+returns a Cloudflare HTTP-403 page, and its Dropload link returns a Turnstile
+form with HTTP 200. Both were rechecked using the updated resolver and are
+reported as protected. This update does not make those two gated links playable;
+public Dropload player parsing is covered by offline fixtures. Einschalten's
+observed `vide0.net` link was verified only as a catalog/host link, not as playable
+media. Browser-protected KinoGer/Moflix pages were not added as new providers.
+
+Research sources: [the supplied FMHY German list](https://fmhy.net/non-english#german-deutsch),
+[SerienStream](https://serienstream.to),
+[Movie2k](https://movie2k.cx), [Einschalten](https://einschalten.in),
+[maintained Dood resolver](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/doodstream.py),
+[maintained Dropload resolver](https://github.com/Gujal00/ResolveURL/blob/master/script.module.resolveurl/lib/resolveurl/plugins/dropload.py).

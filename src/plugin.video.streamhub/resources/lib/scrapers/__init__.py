@@ -19,7 +19,7 @@ def _load():
 	if _REGISTRY:
 		return
 	for mod in ("vavoo", "movie4k", "filmpalast", "kinox", "ramoflix", "movies67",
-	            "hdfilme", "streamkiste"):
+	            "hdfilme", "streamkiste", "serienstream", "movie2k", "einschalten"):
 		try:
 			__import__("lib.scrapers." + mod)
 		except Exception:

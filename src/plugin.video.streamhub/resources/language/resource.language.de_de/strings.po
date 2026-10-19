@@ -283,3 +283,15 @@ msgstr "HDfilme"
 msgctxt "#30086"
 msgid "StreamKiste"
 msgstr "StreamKiste"
+
+msgctxt "#30088"
+msgid "SerienStream (series)"
+msgstr "SerienStream (Serien)"
+
+msgctxt "#30089"
+msgid "Movie2k"
+msgstr "Movie2k"
+
+msgctxt "#30090"
+msgid "Einschalten"
+msgstr "Einschalten"

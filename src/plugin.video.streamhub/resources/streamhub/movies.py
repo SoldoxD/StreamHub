@@ -1085,7 +1085,7 @@ def check_host_deep(host, timeout=3):
 	return verdict
 
 
-_HOST_SORT = {"vavoo": 0, "filmpalast": 1, "67movies": 2, "ramoflix": 3, "kinox": 4, "hdfilme": 5, "streamkiste": 6}
+_HOST_SORT = {"vavoo": 0, "filmpalast": 1, "67movies": 2, "ramoflix": 3, "kinox": 4, "hdfilme": 5, "streamkiste": 6, "serienstream": 7, "movie2k": 8, "einschalten": 9}
 
 _LANG_MAP = {
 	"de": "DE", "deu": "DE", "ger": "DE", "german": "DE", "deutsch": "DE",
@@ -1247,6 +1247,9 @@ _PROV_COLOUR = {
 	"67movies": "khaki",
 	"hdfilme": "lightblue",
 	"streamkiste": "coral",
+	"serienstream": "lightgreen",
+	"movie2k": "violet",
+	"einschalten": "lightskyblue",
 }
 
 
@@ -1260,12 +1263,33 @@ def _provider_breakdown(hosts):
 		for p, n in sorted(counts.items(), key=lambda kv: -kv[1]))
 
 
+def _host_protected(host):
+	try:
+		from streamhub.resolvers import get_resolve_failure
+		protected = get_resolve_failure(host.get("url", "")) == "protected"
+	except ImportError:
+		protected = host.get("_failure") == "protected"
+	if protected:
+		host["_failure"] = "protected"
+	else:
+		host.pop("_failure", None)
+	return protected
+
+
+def _unplayable_message(hosts):
+	if any(host.get("_failure") == "protected" for host in hosts):
+		return "Kein Hoster spielbar; Zugriff teilweise durch Schutzprüfung blockiert"
+	return "Kein Hoster spielbar"
+
+
 def _host_display(h, index=None):
 	qscore, qlabel = _detect_quality(h)
 	prov = h.get("provider") or ""
 	host = h.get("host") or "?"
 	badges = []
-	if h.get("_alive") is True:
+	if h.get("_failure") == "protected":
+		badges.append("[COLOR orange]Schutzprüfung[/COLOR]")
+	elif h.get("_alive") is True:
 		badges.append("[COLOR lime]OK[/COLOR]")
 	elif h.get("_alive") is False:
 		badges.append("[COLOR red]tot[/COLOR]")
@@ -1432,15 +1456,17 @@ def choose_and_play(item, all_hosts, heading, prog, host_select, deep_check):
 			if stream:
 				_start_playback(item, host, stream)
 				return True
-			host["_alive"] = False
+			protected = _host_protected(host)
+			host["_alive"] = None if protected else False
 			pool.pop(idx)
 			if pool:
 				dialog.notification(
 					"StreamHub",
-					"%s nicht abrufbar - anderen Hoster wählen"
+					("%s: Schutzprüfung blockiert den Zugriff - anderen Hoster wählen"
+					 if protected else "%s nicht abrufbar - anderen Hoster wählen")
 					% host.get("host", "?"), time=4000)
 			else:
-				fail_resolved("Kein Hoster spielbar")
+				fail_resolved(_unplayable_message(all_hosts))
 				return True
 		return False
 
@@ -1489,7 +1515,7 @@ def choose_and_play(item, all_hosts, heading, prog, host_select, deep_check):
 	if stream:
 		_start_playback(item, chosen, stream)
 		return
-	fail_resolved("Kein Hoster spielbar")
+	fail_resolved(_unplayable_message(all_hosts))
 
 
 _TRUST_RESOLVE_HOSTS = ("dood", "cloudatacdn", "d0000d", "vidply", "playmogo")
@@ -1770,6 +1796,7 @@ def _resolve_host(host):
 			mirror = {"url": host["url"]}
 			url = vavoo_resolve(mirror)
 			if not url:
+				_host_protected(host)
 				return None
 			if "|" in url:
 				u, hdr = url.split("|", 1)
@@ -1819,12 +1846,12 @@ def _resolve_embed(host):
 	ref = host.get("referer") or url
 	try:
 		from streamhub.resolvers import resolve as vendor_resolve, is_blocked
-		if is_blocked(url):
+		if _host_protected(host) or is_blocked(url):
 			return None
 		res = vendor_resolve(url, ref, generic=False)
 		if res:
 			return res
-		if is_blocked(url):
+		if _host_protected(host) or is_blocked(url):
 			return None
 	except Exception:
 		log(format_exc())

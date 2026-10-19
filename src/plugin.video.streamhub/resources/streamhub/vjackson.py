@@ -281,11 +281,13 @@ def resolve(mirror):
 	log(mirror, header="Try to resolve:")
 
 	try:
-		from streamhub.resolvers import resolve as vendor_resolve
+		from streamhub.resolvers import resolve as vendor_resolve, get_resolve_failure
 		res = vendor_resolve(mirror["url"], mirror.get("url"))
 		if res:
 			url, hdr = res
 			return url + ("|" + hdr if hdr else "")
+		if get_resolve_failure(mirror["url"]) == "protected":
+			return None
 	except Exception:
 		log(format_exc())
 
@@ -302,11 +304,13 @@ def resolve(mirror):
 		_data = {"language":"de","region":"AT","url":mirror["url"],"clientVersion":"3.0.2"}
 		url = request_json("POST", "https://vavoo.to/mediahubmx-resolve.json", json=_data, headers=_headers, timeout=4, retries=0)["data"]["url"]
 		try:
-			from streamhub.resolvers import resolve as vendor_resolve
+			from streamhub.resolvers import resolve as vendor_resolve, get_resolve_failure
 			res = vendor_resolve(url, mirror.get("url"))
 			if res:
 				u, hdr = res
 				return u + ("|" + hdr if hdr else "")
+			if get_resolve_failure(url) == "protected":
+				return None
 		except Exception:
 			log(format_exc())
 		if resolveurl is not None:

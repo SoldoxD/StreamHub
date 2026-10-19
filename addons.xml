@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.streamhub" name="StreamHub" version="2026.10.12.2" provider-name="cybermodz">
+<addon id="plugin.video.streamhub" name="StreamHub" version="2026.10.19" provider-name="cybermodz">
 	<requires>
 		<!-- xbmc.python 3.0.0 covers Kodi 19 (Matrix) and up. -->
 		<import addon="xbmc.python" version="3.0.0"/>
@@ -18,9 +18,9 @@
 	<extension point="xbmc.service" library="resources/service.py" start="startup"/>
 	<extension point="xbmc.addon.metadata">
 		<summary lang="en">StreamHub Video Add-on</summary>
-		<description lang="en">Live TV, movies and series with xstream-style multi-source host selection. Live: VAVOO, DaddyLive (DLHD) + Soccer schedule, Stalker. Movies/Series across VAVOO + 67movies + ramoflix + filmpalast + kinox + HDfilme + StreamKiste (movies). Resolved via resolveurl + best-effort embed extractors.</description>
+		<description lang="en">Live TV, movies and series with xstream-style multi-source host selection. Live: VAVOO, DaddyLive (DLHD) + Soccer schedule, Stalker. Movies/Series across VAVOO + 67movies + ramoflix + filmpalast + kinox + HDfilme + StreamKiste + Movie2k + Einschalten (movies); SerienStream for series. Resolved via resolveurl + best-effort embed extractors.</description>
 		<summary lang="de_DE">StreamHub Video Add-on</summary>
-		<description lang="de_DE">Live-TV, Filme und Serien mit xstream-Stil Hoster-Auswahl. Live: VAVOO, DaddyLive (DLHD) + Soccer-Schedule, Stalker. Filme/Serien aus VAVOO + 67movies + ramoflix + filmpalast + kinox; zusätzlich HDfilme + StreamKiste für Filme. Auflösung via resolveurl + Embed-Extraktoren.</description>
+		<description lang="de_DE">Live-TV, Filme und Serien mit xstream-Stil Hoster-Auswahl. Live: VAVOO, DaddyLive (DLHD) + Soccer-Schedule, Stalker. Filme/Serien aus VAVOO + 67movies + ramoflix + filmpalast + kinox; zusätzlich HDfilme + StreamKiste + Movie2k + Einschalten für Filme und SerienStream für Serien. Auflösung via resolveurl + Embed-Extraktoren.</description>
 		<platform>all</platform>
 		<assets>
 			<icon>icon.png</icon>

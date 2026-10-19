@@ -315,6 +315,18 @@ def _enabled_providers():
 		provs.append(Movie4kSeriesProvider())
 	if getSetting("movies67") == "true":
 		provs.append(Movies67SeriesProvider())
+	try:
+		from lib.scrapers.adapter import series_providers
+		from lib.scrapers.base import kodi_token
+		try:
+			from streamhub.movies import _TOKEN
+		except ImportError:
+			_TOKEN = None
+		existing = {provider.name for provider in provs}
+		provs.extend(provider for provider in series_providers(token=_TOKEN or kodi_token())
+		             if provider.name not in existing)
+	except Exception:
+		log("series: additional providers unavailable\n%s" % format_exc())
 	return provs
 
 
@@ -486,13 +498,66 @@ def _search_and_list(query):
 _META_PROVIDERS = (("vavoo", VavooSeriesProvider), ("movie4k", Movie4kSeriesProvider))
 
 
-def _meta_hit(series):
-	hits = series.get("hits", [])
+def _metadata_candidates(series):
+	"""Use enabled providers, retaining legacy metadata support where needed."""
+	providers = {provider.name: provider for provider in _enabled_providers()}
 	for name, cls in _META_PROVIDERS:
-		for h in hits:
-			if h.get("provider") == name:
-				return h, cls()
-	return None, None
+		if name in providers:
+			providers[name] = cls()
+	hits = list(series.get("hits") or [])
+	preferred = series.get("_metadata_provider")
+	ranks = {"vavoo": 0, "movie4k": 1}
+	hits.sort(key=lambda hit: (hit.get("provider") != preferred,
+	                           ranks.get(hit.get("provider"), 2)))
+	seen = set()
+	for hit in hits:
+		name = hit.get("provider")
+		provider = providers.get(name)
+		if provider and name not in seen and not getattr(provider, "virtual", False):
+			seen.add(name)
+			yield hit, provider
+
+
+def _meta_hit(series):
+	return next(_metadata_candidates(series), (None, None))
+
+
+def _season_metadata(series):
+	for hit, provider in _metadata_candidates(series):
+		try:
+			seasons_list = provider.get_seasons(hit) or []
+		except Exception as error:
+			from lib.scrapers.base import Cancelled
+			if isinstance(error, Cancelled):
+				raise
+			log(format_exc())
+			continue
+		if seasons_list:
+			series["_metadata_provider"] = provider.name
+			return hit, seasons_list
+	return None, []
+
+
+def _episode_records(provider, hit, season):
+	"""Preserve provider episode numbers and titles, including gaps."""
+	reader = getattr(provider, "get_episodes", None)
+	if callable(reader):
+		rows = reader(hit, season) or []
+	else:
+		count = provider.get_episode_count(hit, season)
+		rows = [{"episode_number": number} for number in range(1, count + 1)]
+	out = {}
+	for row in rows:
+		if not isinstance(row, dict):
+			continue
+		try:
+			number = int(row.get("episode_number"))
+		except (ValueError, TypeError):
+			continue
+		if number > 0:
+			out.setdefault(number, dict(row, episode_number=number))
+	return [out[number] for number in sorted(out)]
+
 
 
 def seasons(params):
@@ -502,14 +567,8 @@ def seasons(params):
 		showFailedNotification("Series-Daten ungültig")
 		return
 
-	meta_hit, provider = _meta_hit(series)
-	if not meta_hit:
-		dialog.notification("StreamHub",
-		                    "Keine Saison-Metadaten verfügbar",
-		                    time=4000)
-		return
-	seasons_list = provider.get_seasons(meta_hit)
-	if not seasons_list:
+	meta_hit, seasons_list = _season_metadata(series)
+	if not meta_hit or not seasons_list:
 		dialog.notification("StreamHub", "Keine Staffeln gefunden", time=3000)
 		return
 
@@ -578,17 +637,24 @@ def episodes(params):
 
 
 def _list_episodes(series, meta_hit, season):
-	_, provider = _meta_hit(series)
+	selected_hit, provider = _meta_hit(series)
 	if provider is None:
-		provider = VavooSeriesProvider()
-	count = provider.get_episode_count(meta_hit, season)
-	if count <= 0:
+		dialog.notification("StreamHub", "Keine Staffel-Metadaten", time=3000)
+		return
+	records = _episode_records(provider, selected_hit, season)
+	if not records:
 		dialog.notification("StreamHub", "Keine Episoden gefunden", time=3000)
 		return
 	set_content("episodes")
 	set_category("%s - Staffel %s" % (series.get("title", ""), season))
-	for ep in range(1, count + 1):
+	numbers = [row["episode_number"] for row in records]
+	last_episode = numbers[-1]
+	for record in records:
+		ep = record["episode_number"]
 		label = "S%sE%s" % (str(season).zfill(2), str(ep).zfill(2))
+		name = record.get("name") or record.get("title")
+		if name:
+			label += " - " + str(name)
 		o = ListItem(label)
 		o.setProperty("IsPlayable", "true")
 		if series.get("poster"):
@@ -614,7 +680,8 @@ def _list_episodes(series, meta_hit, season):
 			"series": json.dumps(series),
 			"season": str(season),
 			"episode": str(ep),
-			"ep_count": str(count),
+			"ep_count": str(last_episode),
+			"episode_numbers": json.dumps(numbers),
 		}
 		add(params, o, False)
 	end()
@@ -713,7 +780,8 @@ def play(params):
 	prog.step(5, "Suche Hoster …", heading)
 
 	cache_key = {"_ep_hosts": series.get("tmdb_id") or series.get("title", ""),
-	             "s": season, "e": episode}
+	             "s": season, "e": episode,
+	             "providers": sorted(provider.name for provider in _enabled_providers())}
 	cacheOk, cached_hosts = get_cache(cache_key)
 	if cacheOk and isinstance(cached_hosts, list) and cached_hosts:
 		all_hosts = cached_hosts
@@ -754,7 +822,8 @@ def play(params):
 		resume.save_playmeta(
 			resume.key_for(ep_movie), "episode",
 			{"action": "series_play", "series": params.get("series", "{}"),
-			 "season": str(season), "episode": str(episode)},
+			 "season": str(season), "episode": str(episode),
+			 "ep_count": str(ep_count), "episode_numbers": params.get("episode_numbers")},
 			title=ep_movie["title"], poster=series.get("poster", ""),
 			season=str(season), episode=str(episode),
 			episode_count=ep_count or None)

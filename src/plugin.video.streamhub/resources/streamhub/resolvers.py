@@ -184,6 +184,7 @@ def _dood_media_url(prefix, page_html, pass_url):
 
 
 def resolve_dood(url):
+	_set_resolve_failure(url)
 	try:
 		page_url = _dood_page_url(url)
 		origin = urlparse(page_url)._replace(path="/", params="", query="", fragment="").geturl()
@@ -197,7 +198,7 @@ def resolve_dood(url):
 			r = request("GET", page_url, headers=_hdr(referer), timeout=8,
 			            retries=1, allow_redirects=True, max_bytes=1024 * 1024)
 			if _challenged(r):
-				mark_blocked(r.url)
+				_set_resolve_failure(url, "protected")
 				return None
 			if r.status_code >= 400:
 				return None
@@ -215,7 +216,7 @@ def resolve_dood(url):
 				pr = request("GET", pass_url, headers=_hdr(player_ref), timeout=8,
 				             retries=1, max_bytes=16384)
 				if _challenged(pr):
-					mark_blocked(pr.url)
+					_set_resolve_failure(url, "protected")
 					return None
 				if pr.status_code >= 400:
 					return None
@@ -242,6 +243,106 @@ def resolve_dood(url):
 	except Exception:
 		log(format_exc())
 	return None
+
+
+# Public host/path formats confirmed by ResolveURL's maintained Dropload plugin.
+DROPLOAD_HOSTS = ("dropload.io", "dropload.tv", "dropload.pro", "dropload.co", "dr0pstream.com")
+_DROPLOAD_PATH = re.compile(r"^/(?:embed-|[ed]/)?([A-Za-z0-9]+)(?:\.html)?/?$")
+
+
+def is_dropload_url(url):
+	try:
+		parsed = urlparse(url)
+		host = (parsed.hostname or "").lower().rstrip(".")
+		return parsed.scheme in ("http", "https") and any(
+			host == domain or host.endswith("." + domain) for domain in DROPLOAD_HOSTS)
+	except ValueError:
+		return False
+
+
+def _dropload_page_url(url):
+	if not is_dropload_url(url):
+		return None
+	parsed = urlparse(url)
+	match = _DROPLOAD_PATH.fullmatch(parsed.path)
+	if not match:
+		return None
+	return parsed._replace(path="/e/" + match.group(1), fragment="").geturl()
+
+
+def resolve_dropload(url, referer=None):
+	"""Read a public player only; a captcha form is never submitted."""
+	_set_resolve_failure(url)
+	try:
+		page_url = _dropload_page_url(url)
+		if not page_url:
+			return None
+		r = request("GET", page_url, headers=_hdr(referer or page_url), timeout=8,
+		            retries=1, allow_redirects=True, max_bytes=1024 * 1024)
+		if _challenged(r):
+			_set_resolve_failure(url, "protected")
+			return None
+		if r.status_code >= 400:
+			return None
+		# Reuse the literal-only parser: no JavaScript execution, form POSTs,
+		# or loose MP4 matches from advertisements outside the sources array.
+		from streamhub.host_support import _COMMENTS, _SOURCES, _enclosed, _sources, _url, _unpacked
+		candidates = []
+		for text in (r.text or "", _unpacked(r.text or "", unpack)):
+			text = _COMMENTS.sub(lambda match: match.group(1) or " ", text)
+			for match in list(_SOURCES.finditer(text))[:32]:
+				value = _enclosed(text[match.end() - 1:])
+				for source, hint in _sources(value):
+					media = _url(source, r.url)
+					if media and not re.search(r"[\s|]", media):
+						adaptive = ("mpegurl" in hint.lower() or hint.lower() == "hls"
+						            or urlparse(media).path.lower().endswith(".m3u8"))
+						candidates.append((adaptive, media))
+		if candidates:
+			media = next((media for adaptive, media in candidates if adaptive), candidates[0][1])
+			parsed = urlparse(r.url)
+			origin = "%s://%s" % (parsed.scheme, parsed.netloc)
+			return media, urlencode({"User-Agent": UA, "Referer": origin + "/", "Origin": origin})
+	except Exception:
+		log(format_exc())
+	return None
+
+
+# A short-lived diagnostic belongs to a link, never its entire host family.
+# Dood aliases share file IDs; /d/ and /e/ views must report the same result.
+_RESOLVE_FAILURES = {}
+
+
+def _failure_key(url):
+	if is_dood_url(url):
+		match = re.match(r"^/[de]/([A-Za-z0-9]+)(?:/|$)", urlparse(url).path)
+		if match:
+			return "dood:" + match.group(1)
+	return url
+
+
+def _set_resolve_failure(url, reason=None):
+	key = _failure_key(url)
+	if reason is None:
+		_RESOLVE_FAILURES.pop(key, None)
+	else:
+		_RESOLVE_FAILURES[key] = (reason, _time.time())
+		if len(_RESOLVE_FAILURES) > 128:
+			_RESOLVE_FAILURES.pop(next(iter(_RESOLVE_FAILURES)), None)
+
+
+def get_resolve_failure(url):
+	"""Return 'protected' for this link's recent captcha response, else None.
+
+	This is a five-minute diagnostic, not a dead-link cache or a retry block.
+	A new native resolution attempt clears it before fetching the player.
+	"""
+	key = _failure_key(url)
+	reason, observed = _RESOLVE_FAILURES.get(key, (None, 0))
+	if _time.time() - observed > 300:
+		_RESOLVE_FAILURES.pop(key, None)
+		return None
+	return reason
 
 
 _HLS_RE = re.compile(r'https?://[^\s\'"<>]+\.m3u8[^\s\'"<>]*')
@@ -314,10 +415,13 @@ def mark_ok(url):
 
 def _challenged(resp):
 	try:
-		if resp.status_code not in (403, 503, 429):
-			return False
-		body = (resp.text or "")[:4000].lower()
-		return any(m in body for m in _CF_MARKERS)
+		body = (resp.text or "")[:1024 * 1024].lower()
+		if resp.status_code in (403, 503, 429) and any(m in body for m in _CF_MARKERS):
+			return True
+		# Dropload returns HTTP 200 for its Turnstile/recaptcha form.
+		return "<form" in body and bool(re.search(
+			r"[<][^>]+(?:class\s*=\s*['\"][^'\"]*(?:g-recaptcha|cf-turnstile)|challenges\.cloudflare\.com/turnstile/)",
+			body))
 	except Exception:
 		return False
 
@@ -627,8 +731,10 @@ def resolve(url, referer=None, generic=True):
 			return res
 	if is_dood_url(url):
 		res = resolve_dood(url)
-		if res:
+		if res or get_resolve_failure(url) == "protected":
 			return res
+	if is_dropload_url(url):
+		return resolve_dropload(url, referer)
 	if _match(url, VIDARA_HOSTS):
 		res = resolve_vidara(url)
 		if res:

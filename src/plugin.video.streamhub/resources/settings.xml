@@ -131,6 +131,21 @@
 					<default>true</default>
 					<control type="toggle"/>
 				</setting>
+				<setting id="serienstream" type="boolean" label="30088">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
+				<setting id="movie2k" type="boolean" label="30089">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
+				<setting id="einschalten" type="boolean" label="30090">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="movie4k" type="boolean" label="30038">
 					<level>2</level>
 					<default>true</default>
